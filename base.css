@@ -1,0 +1,102 @@
+/* ============================================================
+   base.css — Tokens · Reset · Typography
+   ============================================================ */
+
+[data-theme="dark"] {
+  --bg:             #0A0A0F;
+  --surface:        #111118;
+  --surface-raised: #1C1C28;
+  --border:         #1E1E2E;
+  --accent:         #5B6EF5;
+  --accent-dim:     rgba(91,110,245,0.12);
+  --accent-hover:   #6B7EFF;
+  --accent-glow:    rgba(91,110,245,0.22);
+  --text:           #E8E8F0;
+  --text-muted:     #6E6E90;
+  --text-faint:     #52527A;
+  --success:        #3DDC97;
+  --success-dim:    rgba(61,220,151,0.12);
+  --warning:        #F5A623;
+  --warning-dim:    rgba(245,166,35,0.12);
+  --error:          #F56565;
+  --error-dim:      rgba(245,101,101,0.12);
+  --toggle-track:   #1A1A28;
+  --input-bg:       #0D0D14;
+  --card-bg:        rgba(17,17,24,0.95);
+  --card-border:    rgba(255,255,255,0.07);
+  --card-shine:     rgba(255,255,255,0.05);
+  --card-shadow:    0 24px 64px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04);
+  --dot-color:      rgba(91,110,245,0.15);
+  --glow-color:     rgba(91,110,245,0.07);
+  --font-ui:    'Sora', sans-serif;
+  --font-mono:  'DM Mono', monospace;
+  --font-notes: 'Lora', serif;
+  --header-h:   56px;
+  --dock-h:     80px;
+  --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-full: 9999px;
+  --t-fast: 150ms ease-out;
+  --t-base: 300ms ease;
+  --t-spring: 300ms cubic-bezier(0.4,0,0.2,1);
+}
+
+[data-theme="light"] {
+  --bg:             #EEEEF8;
+  --surface:        #FFFFFF;
+  --surface-raised: #F8F8FF;
+  --border:         #DDDDED;
+  --accent:         #4A5CE8;
+  --accent-dim:     rgba(74,92,232,0.09);
+  --accent-hover:   #5568F0;
+  --accent-glow:    rgba(74,92,232,0.16);
+  --text:           #0D0D1A;
+  --text-muted:     #7070A0;
+  --text-faint:     #C0C0D8;
+  --success:        #2AB97A;
+  --success-dim:    rgba(42,185,122,0.10);
+  --warning:        #D4860F;
+  --warning-dim:    rgba(212,134,15,0.10);
+  --error:          #D94545;
+  --error-dim:      rgba(217,69,69,0.10);
+  --toggle-track:   #E0E0F0;
+  --input-bg:       #F4F4FC;
+  --card-bg:        rgba(255,255,255,0.97);
+  --card-border:    rgba(74,92,232,0.12);
+  --card-shine:     rgba(255,255,255,1);
+  --card-shadow:    0 16px 48px rgba(74,92,232,0.09), 0 2px 8px rgba(0,0,0,0.05);
+  --dot-color:      rgba(74,92,232,0.11);
+  --glow-color:     rgba(74,92,232,0.06);
+  --font-ui:    'Sora', sans-serif;
+  --font-mono:  'DM Mono', monospace;
+  --font-notes: 'Lora', serif;
+  --header-h:   56px;
+  --dock-h:     80px;
+  --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-full: 9999px;
+  --t-fast: 150ms ease-out;
+  --t-base: 300ms ease;
+  --t-spring: 300ms cubic-bezier(0.4,0,0.2,1);
+}
+
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.6;
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color var(--t-base), color var(--t-base);
+}
+img, svg { display: block; max-width: 100%; }
+input, button, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; border: none; background: none; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-hover); }
+ul, ol { list-style: none; }
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: var(--r-sm); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

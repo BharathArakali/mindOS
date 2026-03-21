@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="mindOS — Your personal focus operating system." />
+  <meta name="theme-color" content="#0A0A0F" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="mindOS" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+  <link rel="manifest" href="./manifest.json" />
+  <title>mindOS<span class="cursor">_</span></title>
+
+  <script>
+    (function(){
+      var t = localStorage.getItem('mindos_theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Lora:ital,wght@0,400;0,500;1,400&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="./base.css" />
+  <link rel="stylesheet" href="./animations.css" />
+  <link rel="stylesheet" href="./layout.css" />
+  <link rel="stylesheet" href="./components.css" />
+</head>
+<body>
+
+<div id="app-shell">
+
+  <header id="app-header" role="banner">
+    <div class="header-inner">
+
+      <!-- Left: logo -->
+      <span class="header-logo" id="header-logo" aria-label="mindOS_">mindOS<span class="cursor">_</span></span>
+
+      <!-- Centre: module tab nav — shown only inside modules, hidden on home/auth -->
+      <nav class="header-nav" id="header-nav" aria-label="Modules"></nav>
+
+      <!-- Right: settings + avatar + theme toggle -->
+      <div class="header-right">
+        <div id="theme-toggle-mount"></div>
+
+        <!-- Settings gear — hidden on auth -->
+        <button class="header-icon-btn" id="settings-btn"
+                aria-label="Settings" style="display:none;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83
+                     2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1
+                     1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65
+                     0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65
+                     0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65
+                     1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1
+                     2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0
+                     1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65
+                     0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65
+                     0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65
+                     1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+
+        <!-- Profile avatar — hidden on auth -->
+        <button class="avatar-btn" id="avatar-btn"
+                aria-label="Profile" style="display:none;">
+          <span class="avatar-initials" id="avatar-initials">?</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="view-root" role="main" aria-live="polite"></main>
+
+  <!-- Dock hover label -->
+  <div id="dock-label" aria-hidden="true"></div>
+
+  <!-- Bottom dock -->
+  <nav id="app-dock" role="navigation" aria-label="Module navigation">
+    <div class="dock-capsule"></div>
+  </nav>
+
+</div>
+
+<!-- Profile slide-over -->
+<div id="profile-overlay" class="profile-overlay" style="display:none;" aria-hidden="true">
+  <div class="profile-panel" id="profile-panel">
+    <div class="profile-panel__header">
+      <span class="profile-panel__title">Profile</span>
+      <button class="profile-panel__close" id="profile-close" aria-label="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="profile-panel__body" id="profile-body"></div>
+  </div>
+</div>
+
+<!-- Toast notifications -->
+<div id="toast-root" role="status" aria-live="polite" aria-atomic="true"></div>
+
+<script type="module" src="./main.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('./service-worker.js').catch(function(){});
+    });
+  }
+</script>
+</body>
+</html>
