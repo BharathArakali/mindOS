@@ -6,7 +6,7 @@
 
 import { Storage, KEYS } from './storage.js';
 
-const THEMES = { DARK: 'dark', LIGHT: 'light' };
+const THEMES = { DARK: 'dark', LIGHT: 'light', AUTO: 'auto' };
 
 export const Theme = {
   /**
@@ -16,11 +16,15 @@ export const Theme = {
    * Call once on app boot — before any module init.
    */
   init() {
-    // Apply saved theme immediately (the anti-flash script already did this
-    // for first paint, but this ensures our JS state matches)
     const saved = Storage.get(KEYS.THEME, THEMES.DARK);
     _applyTheme(saved);
     _renderToggle();
+    // Watch system preference changes when in auto mode
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (Storage.get(KEYS.THEME, THEMES.DARK) === THEMES.AUTO) {
+        _applyTheme(THEMES.AUTO);
+      }
+    });
   },
 
   /**
@@ -28,11 +32,18 @@ export const Theme = {
    * and animates the transition.
    */
   toggle() {
-    const current = Theme.getCurrent();
-    const next = current === THEMES.DARK ? THEMES.LIGHT : THEMES.DARK;
-    _applyTheme(next);
+    const saved = Storage.get(KEYS.THEME, THEMES.DARK);
+    const cycle = { dark:'light', light:'auto', auto:'dark' };
+    const next  = cycle[saved] || THEMES.DARK;
     Storage.set(KEYS.THEME, next);
+    _applyTheme(next);
     _syncToggleVisuals(next);
+  },
+
+  setTheme(t) {
+    Storage.set(KEYS.THEME, t);
+    _applyTheme(t);
+    _syncToggleVisuals(t);
   },
 
   /**
@@ -51,7 +62,12 @@ export const Theme = {
  * a single attribute swap changes the entire UI.
  */
 function _applyTheme(theme) {
-  document.documentElement.setAttribute('data-theme', theme);
+  if (theme === THEMES.AUTO) {
+    const sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.setAttribute('data-theme', sysDark ? THEMES.DARK : THEMES.LIGHT);
+  } else {
+    document.documentElement.setAttribute('data-theme', theme);
+  }
 }
 
 /**
@@ -129,4 +145,5 @@ function _syncToggleVisuals(theme) {
   const toggle = document.getElementById('theme-toggle');
   if (!toggle) return;
   toggle.setAttribute('aria-checked', theme === THEMES.LIGHT ? 'true' : 'false');
+  toggle.title = theme === 'auto' ? 'Theme: Auto (system)' : theme === 'light' ? 'Theme: Light' : 'Theme: Dark';
 }

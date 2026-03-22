@@ -500,6 +500,31 @@ function _attachEditorEvents() {
   }, { once: false });
 }
 
+/* ── Voice typing helpers ── */
+function _insertAtCursor(el, text) {
+  el.focus();
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount && el.contains(sel.anchorNode)) {
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    const node = document.createTextNode(text);
+    range.insertNode(node);
+    range.setStartAfter(node);
+    range.setEndAfter(node);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } else {
+    // Fallback: move cursor to end and append
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    const node = document.createTextNode(text);
+    range.insertNode(node);
+  }
+}
+
 /* ── Voice typing ── */
 let _recognition = null;
 let _voiceActive = false;
@@ -527,7 +552,8 @@ function _toggleVoice(contentEl) {
   _recognition.interimResults = true;
   _recognition.lang          = 'en-US';
 
-  let _finalTranscript = '';
+  // Track last interim node to avoid repetition
+  let _interimNode = null;
 
   _recognition.onstart = () => {
     _voiceActive = true;
@@ -538,31 +564,37 @@ function _toggleVoice(contentEl) {
   };
 
   _recognition.onresult = (e) => {
-    let interim = '';
+    let finalText   = '';
+    let interimText = '';
+
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const t = e.results[i][0].transcript;
-      if (e.results[i].isFinal) _finalTranscript += t + ' ';
-      else interim = t;
+      if (e.results[i].isFinal) finalText   += t;
+      else                       interimText += t;
     }
-    // Insert final text at cursor position in contenteditable
-    if (_finalTranscript) {
-      const sel = window.getSelection();
-      if (sel && sel.rangeCount && contentEl.contains(sel.anchorNode)) {
-        const range = sel.getRangeAt(0);
-        range.deleteContents();
-        range.insertNode(document.createTextNode(_finalTranscript));
-        range.collapse(false);
-      } else {
-        // Fallback: append to end
-        contentEl.innerHTML += _finalTranscript;
-      }
-      _finalTranscript = '';
-      // Trigger save
+
+    // Remove old interim span
+    if (_interimNode && _interimNode.parentNode) {
+      _interimNode.parentNode.removeChild(_interimNode);
+      _interimNode = null;
+    }
+
+    // Insert final text permanently
+    if (finalText) {
+      _insertAtCursor(contentEl, finalText + ' ');
       contentEl.dispatchEvent(new Event('input'));
+    }
+
+    // Show interim as greyed italic preview
+    if (interimText) {
+      _interimNode = document.createElement('span');
+      _interimNode.style.cssText = 'color:var(--text-faint);font-style:italic;';
+      _interimNode.textContent   = interimText;
+      contentEl.appendChild(_interimNode);
     }
   };
 
-  _recognition.onerror = (e) => {
+    _recognition.onerror = (e) => {
     console.error('Speech recognition error:', e.error);
     _showToast(`Voice error: ${e.error}`, 'warning', 3000);
     _stopVoice(btn);
@@ -576,6 +608,9 @@ function _toggleVoice(contentEl) {
 function _stopVoice(btn) {
   _voiceActive    = false;
   _recognition    = null;
+  // Remove any leftover interim node
+  const interimSpan = _container?.querySelector('span[style*="text-faint"]');
+  if (interimSpan) interimSpan.remove();
   if (btn) {
     btn.style.color      = '';
     btn.style.background = '';

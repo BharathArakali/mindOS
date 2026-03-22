@@ -46,11 +46,13 @@ document.addEventListener('DOMContentLoaded', () => {
   _initProfile();
   _initSettingsBtn();
   _initHelpBtn();
+  _initMobileFAB();
 });
 _initLogoClick();
 _initProfile();
 _initSettingsBtn();
 _initHelpBtn();
+_initMobileFAB();
 
 _handleRoute();
 window.addEventListener('hashchange', _handleRoute);
@@ -119,12 +121,16 @@ function _updateHeaderNav(isAuth, isHome, hash) {
     if (settBtn) settBtn.style.display = 'none';
     const helpBtnH = document.getElementById('help-btn');
     if (helpBtnH) helpBtnH.style.display = 'none';
+    const fabH = document.getElementById('mobile-cmd-fab');
+    if (fabH) fabH.style.display = 'none';
     return;
   }
 
   if (settBtn) settBtn.style.display = 'flex';
   const helpBtn = document.getElementById('help-btn');
   if (helpBtn) helpBtn.style.display = 'flex';
+  const fab = document.getElementById('mobile-cmd-fab');
+  if (fab) fab.style.display = '';  /* CSS controls visibility via media query */
 
   // On home: hide nav tabs (module cards are the nav)
   if (isHome) {
@@ -252,6 +258,15 @@ function _initLogoClick() {
 }
 
 /* ── Settings button (stub — opens a simple dropdown for now) ── */
+function _initMobileFAB() {
+  const fab = document.getElementById('mobile-cmd-fab');
+  if (!fab || fab._bound) return;
+  fab._bound = true;
+  fab.addEventListener('click', () => {
+    import('./commandpalette.js').then(m => m.open());
+  });
+}
+
 function _initHelpBtn() {
   const btn = document.getElementById('help-btn');
   if (!btn || btn._bound) return;
@@ -414,9 +429,11 @@ function _toggleSettingsDropdown(anchor) {
         <div class="settings-section-title">Appearance</div>
         <div class="settings-row">
           <div class="settings-row-info"><span>Theme</span></div>
-          <button class="btn btn-secondary settings-small-btn" id="dd-theme-toggle">
-            ${theme === 'dark' ? '☀ Light' : '☾ Dark'}
-          </button>
+          <div class="settings-theme-btns" id="dd-theme-group">
+            <button class="settings-theme-btn${theme==='dark'?' active':''}" data-theme="dark">🌙 Dark</button>
+            <button class="settings-theme-btn${theme==='light'?' active':''}" data-theme="light">☀ Light</button>
+            <button class="settings-theme-btn${theme==='auto'?' active':''}" data-theme="auto">⚙ Auto</button>
+          </div>
         </div>
         <div class="settings-row">
           <div class="settings-row-info"><span>Accent colour</span></div>
@@ -550,11 +567,14 @@ function _toggleSettingsDropdown(anchor) {
     if (!dd.contains(e.target) && e.target !== anchor) closeDD();
   }, { once: true }), 10);
 
-  // Theme
-  dd.querySelector('#dd-theme-toggle').addEventListener('click', e => {
-    e.stopPropagation();
-    import('./theme.js').then(({ Theme }) => Theme.toggle());
-    closeDD();
+  // Theme 3-way toggle
+  dd.querySelectorAll('.settings-theme-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const t = btn.dataset.theme;
+      import('./theme.js').then(({ Theme }) => Theme.setTheme(t));
+      dd.querySelectorAll('.settings-theme-btn').forEach(b => b.classList.toggle('active', b.dataset.theme === t));
+    });
   });
 
   // Accent colour

@@ -2007,3 +2007,55 @@ body.zen-mode .timer-tabs { display: none; }
   .dash-stat-val { font-size: 28px; }
   .dash-stat-unit { font-size: 14px; }
 }
+
+/* ── Slash hint: desktop only ─────────────────────────────── */
+@media (hover: none) and (pointer: coarse) {
+  /* Touch/mobile devices — hide keyboard hint */
+  .home-slash-hint { display: none !important; }
+}
+
+/* ── Mobile command palette FAB ───────────────────────────── */
+.mobile-cmd-fab {
+  position: fixed;
+  bottom: calc(var(--dock-h) + 16px);
+  right: 16px;
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: none; /* shown via JS when app-mode + mobile */
+  align-items: center; justify-content: center;
+  box-shadow: 0 4px 16px rgba(91,110,245,0.4);
+  z-index: 190;
+  transition: transform var(--t-fast), box-shadow var(--t-fast);
+}
+.mobile-cmd-fab:active { transform: scale(0.92); }
+
+/* Show FAB only on touch mobile */
+@media (hover: none) and (pointer: coarse) {
+  body.app-mode .mobile-cmd-fab { display: flex; }
+}
+
+/* Hide FAB on desktop */
+@media (hover: hover) and (pointer: fine) {
+  .mobile-cmd-fab { display: none !important; }
+}
+
+/* ── Settings theme buttons ────────────────────────────────── */
+.settings-theme-btns {
+  display: flex; gap: 4px;
+}
+.settings-theme-btn {
+  padding: 4px 10px; border-radius: var(--r-full);
+  border: 1px solid var(--border); background: none;
+  font-size: 11px; color: var(--text-muted);
+  font-family: var(--font-ui); cursor: pointer;
+  transition: all var(--t-fast); white-space: nowrap;
+}
+.settings-theme-btn:hover { border-color: var(--accent); color: var(--text); }
+.settings-theme-btn.active {
+  background: var(--accent-dim); border-color: var(--accent);
+  color: var(--accent); font-weight: 600;
+}
