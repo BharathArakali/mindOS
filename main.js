@@ -375,15 +375,38 @@ function _openProfile() {
     ? new Date(user.joinedAt).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })
     : '—';
 
+  const isGuest = !!user.isGuest;
+
   body.innerHTML = `
     <div style="display:flex;align-items:center;gap:14px;">
-      <div class="profile-avatar-lg">${user.avatarInitials || '?'}</div>
+      <div class="profile-avatar-lg" style="${isGuest ? 'border-color:var(--text-muted);background:var(--surface-raised)' : ''}">
+        ${user.avatarInitials || '?'}
+      </div>
       <div class="profile-meta">
-        <div class="profile-meta__name">${user.name || '—'}</div>
-        <div class="profile-meta__email">${user.email || '—'}</div>
-        <div class="profile-meta__joined">Joined ${joined}</div>
+        <div class="profile-meta__name">${isGuest ? 'Guest' : (user.name || '—')}</div>
+        <div class="profile-meta__email">${isGuest ? 'Not signed in' : (user.email || '—')}</div>
+        ${!isGuest ? `<div class="profile-meta__joined">Joined ${joined}</div>` : ''}
       </div>
     </div>
+
+    ${isGuest ? `
+    <!-- Guest CTA -->
+    <div class="profile-section">
+      <div class="profile-section__title">Your data</div>
+      <p style="font-size:13px;color:var(--text-muted);line-height:1.6;margin-bottom:12px;">
+        You're using mindOS_ as a guest. Your sessions and notes are saved
+        locally but won't sync across devices.
+      </p>
+      <a href="#auth/signup" class="btn btn-primary btn-block"
+         id="guest-signup-btn" style="text-align:center;text-decoration:none;">
+        Create a free account
+      </a>
+      <a href="#auth/login" class="btn btn-secondary btn-block"
+         id="guest-signin-btn"
+         style="text-align:center;text-decoration:none;margin-top:8px;">
+        Sign in to existing account
+      </a>
+    </div>` : `
     <div class="profile-section">
       <div class="profile-section__title">Focus stats</div>
       <div class="profile-stats">
@@ -408,15 +431,37 @@ function _openProfile() {
       </div>
       <button class="btn btn-primary btn-block" id="save-profile-btn" style="margin-top:8px;">Save changes</button>
       <p id="profile-msg" style="display:none;font-size:12px;color:var(--success);text-align:center;margin-top:6px;"></p>
-    </div>
+    </div>`}
+
     <div class="profile-logout-wrap">
-      <button class="btn btn-block" id="logout-btn"
-        style="background:var(--error-dim);color:var(--error);border:1px solid var(--error);font-weight:600;padding:12px;">
-        Sign out
-      </button>
+      ${isGuest
+        ? `<button class="btn btn-block" id="logout-btn"
+             style="background:var(--surface-raised);color:var(--text-muted);
+                    border:1px solid var(--border);font-weight:500;padding:12px;">
+             Exit guest session
+           </button>`
+        : `<button class="btn btn-block" id="logout-btn"
+             style="background:var(--error-dim);color:var(--error);
+                    border:1px solid var(--error);font-weight:600;padding:12px;">
+             Sign out
+           </button>`}
     </div>`;
 
-  body.querySelector('#save-profile-btn').addEventListener('click', () => {
+  // Guest nav buttons — close panel then navigate
+  body.querySelector('#guest-signup-btn')?.addEventListener('click', e => {
+    e.preventDefault();
+    Storage.remove(KEYS.USER);
+    _closeProfile();
+    setTimeout(() => { window.location.hash = '#auth/signup'; }, 280);
+  });
+  body.querySelector('#guest-signin-btn')?.addEventListener('click', e => {
+    e.preventDefault();
+    Storage.remove(KEYS.USER);
+    _closeProfile();
+    setTimeout(() => { window.location.hash = '#auth/login'; }, 280);
+  });
+
+  body.querySelector('#save-profile-btn')?.addEventListener('click', () => {
     const name  = body.querySelector('#p-name').value.trim();
     const focus = parseInt(body.querySelector('#p-focus').value) || 25;
     if (!name) return;

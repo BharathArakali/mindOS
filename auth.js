@@ -6,9 +6,9 @@
 import { Storage, KEYS } from './storage.js';
 import { uuid, hashPassword, generateOTP } from './utils.js';
 
-const EMAILJS_SERVICE_ID  = 'YOUR_SERVICE_ID';
-const EMAILJS_TEMPLATE_ID = 'YOUR_TEMPLATE_ID';
-const EMAILJS_PUBLIC_KEY  = 'YOUR_PUBLIC_KEY';
+const EMAILJS_SERVICE_ID  = 'service_txyxy1o';
+const EMAILJS_TEMPLATE_ID = 'template_qbdjqvb';
+const EMAILJS_PUBLIC_KEY  = 'cmvMHvi4CYMoyd_ri';
 
 /* In-memory OTP state — never written to localStorage */
 let _pendingOTP  = null;  // { code, email, expiresAt, forSignup, userData }
@@ -125,6 +125,13 @@ function _renderLogin(container) {
     <p class="auth-footer">
       No account yet? <a href="#auth/signup" class="auth-link">Create one</a>
     </p>
+
+    <div class="auth-divider">or</div>
+
+    <button class="btn btn-secondary btn-block" id="guest-btn"
+            style="font-size:13px;">
+      Continue as guest
+    </button>
   `);
 
   container.querySelector('#l-email').focus();
@@ -132,6 +139,10 @@ function _renderLogin(container) {
     if (e.key === 'Enter') _doLogin(container);
   });
   container.querySelector('#l-btn').addEventListener('click', () => _doLogin(container));
+
+  container.querySelector('#guest-btn').addEventListener('click', () => {
+    _continueAsGuest(container);
+  });
 }
 
 async function _doLogin(container) {
@@ -526,6 +537,22 @@ function _goHome(container) {
 function _err(el, msg) {
   el.textContent = msg;
   el.style.display = 'block';
+}
+
+function _continueAsGuest(container) {
+  const guestUser = {
+    id:              'guest',
+    name:            'Guest',
+    email:           '',
+    avatarInitials:  'G',
+    timezone:        Intl.DateTimeFormat().resolvedOptions().timeZone,
+    defaultFocusMins: 25,
+    joinedAt:        new Date().toISOString(),
+    theme:           'dark',
+    isGuest:         true,
+  };
+  Storage.set(KEYS.USER, guestUser);
+  _goHome(container);
 }
 
 function _showToast(msg, type = 'default', duration = 4000) {
