@@ -527,22 +527,30 @@ let _emailjsReady = false;
 
 async function _sendEmail(toEmail, otp, name) {
   if (typeof emailjs === 'undefined') {
-    throw new Error('EmailJS script not loaded — check index.html');
+    throw new Error('EmailJS not loaded — check index.html script tag');
   }
   if (!_emailjsReady) {
-    emailjs.init(EMAILJS_PUBLIC_KEY);
+    // v4 API: init takes an object
+    try {
+      emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
+    } catch {
+      // v3 fallback
+      emailjs.init(EMAILJS_PUBLIC_KEY);
+    }
     _emailjsReady = true;
   }
-  console.log('[mindOS_] Sending OTP email to:', toEmail,
-    '| Service:', EMAILJS_SERVICE_ID,
-    '| Template:', EMAILJS_TEMPLATE_ID);
-  const result = await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
-    to_email:       toEmail,
-    otp_code:       String(otp),
-    user_name:      name || 'there',
-    expiry_minutes: '10',
-  });
-  console.log('[mindOS_] Email sent successfully:', result);
+  console.log('[mindOS_] Attempting email to:', toEmail);
+  const result = await emailjs.send(
+    EMAILJS_SERVICE_ID,
+    EMAILJS_TEMPLATE_ID,
+    {
+      to_email:       toEmail,
+      otp_code:       String(otp),
+      user_name:      name || 'there',
+      expiry_minutes: '10',
+    }
+  );
+  console.log('[mindOS_] Email result:', result.status, result.text);
   return result;
 }
 

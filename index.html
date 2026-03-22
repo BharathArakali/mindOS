@@ -111,8 +111,22 @@
 <script type="module" src="./main.js"></script>
 <script>
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function() {
-      navigator.serviceWorker.register('./service-worker.js').catch(function(){});
+    window.addEventListener('load', async function() {
+      // Unregister ALL old service workers first, then register fresh
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (const reg of regs) {
+        const sw = reg.active || reg.waiting || reg.installing;
+        if (sw && !sw.scriptURL.includes('mindos-v4')) {
+          await reg.unregister();
+        }
+      }
+      // Clear all caches except current version
+      const keys = await caches.keys();
+      for (const key of keys) {
+        if (key !== 'mindos-v4') await caches.delete(key);
+      }
+      // Register fresh
+      navigator.serviceWorker.register('./service-worker.js').catch(console.error);
     });
   }
 </script>

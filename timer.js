@@ -5,7 +5,8 @@
 
 import { Storage, KEYS } from './storage.js';
 import { uuid, formatTime, toDateKey } from './utils.js';
-import * as Distraction from './distraction.js';
+import * as Distraction  from './distraction.js';
+import * as FocusMusic  from './focusmusic.js';
 
 const DEFAULTS = { workMins:25, shortBreakMins:5, longBreakMins:15, sessionsUntilLong:4 };
 
@@ -18,6 +19,7 @@ let _sessionId    = null;
 let _workCount    = 0;
 let _zenMode      = false;
 let _editMode     = false;  // true when user is editing timer values inline
+let _historyView  = false; // true when showing session history
 let _container    = null;
 let _keyFn        = null;
 
@@ -34,9 +36,11 @@ export function init(container) {
 export function destroy() {
   clearInterval(_tick); _tick = null;
   Distraction.stopTracking();
+  FocusMusic.stop();
   if (_keyFn) document.removeEventListener('keydown', _keyFn);
   if (_zenMode) { document.body.classList.remove('zen-mode'); _zenMode = false; }
-  _editMode  = false;
+  _editMode     = false;
+  _historyView  = false;
   _container = null;
 }
 
@@ -108,10 +112,18 @@ function _render() {
         </button>
       </div>
 
+      <!-- History toggle -->
+      <button class="timer-history-btn${_historyView?' active':''}" id="t-history"
+              title="Session history">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/>
+        </svg>
+      </button>
+
       <!-- Controls — only Reset + Start/Pause -->
       <div class="timer-controls">
-        <button class="btn btn-secondary timer-btn-reset" id="t-reset"
-                style="min-width:90px;">
+        <button class="btn btn-secondary timer-btn-reset" id="t-reset">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                stroke="currentColor" stroke-width="2" stroke-linecap="round">
             <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
@@ -119,8 +131,7 @@ function _render() {
           </svg>
           Reset
         </button>
-        <button class="btn btn-primary timer-btn-main" id="t-main"
-                style="min-width:120px;">${_mainLabel()}</button>
+        <button class="btn btn-primary timer-btn-main" id="t-main">${_mainLabel()}</button>
       </div>
 
       <!-- Today stats -->
@@ -150,6 +161,10 @@ function _wire() {
   _get('t-main').addEventListener('click', _toggle);
   _get('t-reset').addEventListener('click', _doReset);
   _get('t-zen').addEventListener('click', _toggleZen);
+  _get('t-history')?.addEventListener('click', () => {
+    _historyView = !_historyView;
+    _render();
+  });
 
   /* Clicking the timer display opens inline edit (only when idle/paused) */
   _get('t-display')?.addEventListener('click', () => {
@@ -163,6 +178,19 @@ function _wire() {
   _get('t-edit-val')?.addEventListener('keydown', e => {
     if (e.key === 'Enter')  _saveEdit();
     if (e.key === 'Escape') _cancelEdit();
+  });
+
+  /* Focus music */
+  _container.querySelectorAll('.music-sound-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const isNowPlaying = FocusMusic.toggle(btn.dataset.sound);
+      _container.querySelectorAll('.music-sound-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.sound === btn.dataset.sound && isNowPlaying)
+      );
+    });
+  });
+  _container.querySelector('#music-vol')?.addEventListener('input', e => {
+    FocusMusic.setVolume(e.target.value / 100);
   });
 
   /* Mode tabs */

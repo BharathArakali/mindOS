@@ -17,6 +17,8 @@ export const KEYS = {
   REMINDERS:  'mindos_reminders',
   SETTINGS:   'mindos_settings',
   USERS_DB:   'mindos_users_db',   // stores all registered users (demo only)
+  HABITS:     'mindos_habits',
+  HABIT_LOGS: 'mindos_habit_logs',
 };
 
 export const Storage = {

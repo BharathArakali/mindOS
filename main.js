@@ -5,6 +5,7 @@
 import { Theme }         from './theme.js';
 import { Storage, KEYS } from './storage.js';
 import * as Auth         from './auth.js';
+import * as Onboarding  from './onboarding.js';
 
 /* ── Event Bus ── */
 const _bus = {};
@@ -87,6 +88,10 @@ async function _handleRoute() {
     document.body.classList.add('app-mode');
     _setActiveDock(null);
     _renderHome(viewRoot, user);
+    // Show onboarding on first visit after login (not for guests)
+    if (!user.isGuest && Onboarding.shouldShow()) {
+      setTimeout(() => Onboarding.show(), 600);
+    }
     return;
   }
 
