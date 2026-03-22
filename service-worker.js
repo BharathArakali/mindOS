@@ -2,7 +2,7 @@
    service-worker.js — Cache-first PWA
    Bump CACHE version on every deploy to force fresh files.
    ============================================================ */
-const CACHE = 'mindos-v4';
+const CACHE = 'mindos-v5';
 
 const ASSETS = [
   './',
@@ -21,6 +21,7 @@ const ASSETS = [
   './habits.js',
   './focusmusic.js',
   './onboarding.js',
+  './commandpalette.js',
   './theme.js',
   './storage.js',
   './utils.js',

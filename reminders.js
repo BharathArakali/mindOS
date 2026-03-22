@@ -15,6 +15,11 @@ export function init(container) {
   _container = container;
   _scheduleAll();
   _render();
+  const action = sessionStorage.getItem('mindos_action');
+  if (action === 'new_reminder') {
+    sessionStorage.removeItem('mindos_action');
+    setTimeout(() => _openForm(), 200);
+  }
 }
 
 export function destroy() {

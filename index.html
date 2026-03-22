@@ -116,14 +116,14 @@
       const regs = await navigator.serviceWorker.getRegistrations();
       for (const reg of regs) {
         const sw = reg.active || reg.waiting || reg.installing;
-        if (sw && !sw.scriptURL.includes('mindos-v4')) {
+        if (sw && !sw.scriptURL.includes('mindos-v5')) {
           await reg.unregister();
         }
       }
       // Clear all caches except current version
       const keys = await caches.keys();
       for (const key of keys) {
-        if (key !== 'mindos-v4') await caches.delete(key);
+        if (key !== 'mindos-v5') await caches.delete(key);
       }
       // Register fresh
       navigator.serviceWorker.register('./service-worker.js').catch(console.error);

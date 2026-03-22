@@ -26,11 +26,47 @@ let _activeColor = 'all'; // color filter state
 
 /* ── Helpers ── */
 function _getSettings() { return Storage.get(KEYS.SETTINGS, {}); }
-function _colorTagsOn() { return !!_getSettings().colorTagsEnabled; }
+function _colorTagsOn() { const v = _getSettings().colorTagsEnabled; return v === undefined ? true : !!v; }
 
 /* ── Public API ── */
 export function init(container) {
   _container = container;
+  _render();
+
+  // Handle actions from command palette
+  const action = sessionStorage.getItem('mindos_action');
+  if (action) {
+    sessionStorage.removeItem('mindos_action');
+    if (action === 'new_note')       setTimeout(_createNote, 100);
+    if (action === 'weekly_review')  setTimeout(_createWeeklyReview, 100);
+  }
+}
+
+function _createWeeklyReview() {
+  const now  = new Date();
+  const week = `Week of ${now.toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' })}`;
+  const body = `<h2>Weekly Review — ${week}</h2>
+<h3>What went well this week?</h3>
+<p></p>
+<h3>What was challenging?</h3>
+<p></p>
+<h3>Focus & productivity</h3>
+<p></p>
+<h3>Habits — what to start, stop, continue?</h3>
+<ul><li>Start: </li><li>Stop: </li><li>Continue: </li></ul>
+<h3>Goal for next week</h3>
+<p></p>
+<h3>Anything else?</h3>
+<p></p>`;
+
+  const note = {
+    id: uuid(), title: `Weekly Review — ${week}`,
+    body, tags: ['review', 'weekly'],
+    color: 'blue', pinned: false,
+    createdAt: now.toISOString(), updatedAt: now.toISOString(),
+  };
+  Storage.update(KEYS.NOTES, arr => [note, ...(Array.isArray(arr) ? arr : [])], []);
+  _activeId = note.id;
   _render();
 }
 
@@ -416,12 +452,15 @@ function _attachEditorEvents() {
   _container.querySelector('#download-btn')?.addEventListener('click', () => {
     const note = _getNotes().find(n => n.id === _activeId);
     if (!note) return;
-    const title = note.title || 'note';
-    const text  = `${title}\n${'='.repeat(title.length)}\n\n${content.innerText || ''}`;
-    const blob  = new Blob([text], { type: 'text/plain' });
-    const url   = URL.createObjectURL(blob);
-    const a     = Object.assign(document.createElement('a'),
-                    { href: url, download: `${title.replace(/[^a-z0-9]/gi,'_')}.txt` });
+    const title    = note.title || 'Untitled';
+    const tags     = (note.tags || []).map(t => `#${t}`).join(' ');
+    // Convert HTML to Markdown
+    const md = _htmlToMarkdown(content.innerHTML);
+    const text = `# ${title}\n${tags ? `\n${tags}\n` : ''}\n${md}`;
+    const blob = new Blob([text], { type: 'text/markdown' });
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement('a'),
+                   { href: url, download: `${title.replace(/[^a-z0-9]/gi,'_')}.md` });
     a.click();
     URL.revokeObjectURL(url);
   });
@@ -636,5 +675,32 @@ function _showUndoToast(msg, onUndo) {
     if (!done) { t.classList.add('exiting'); t.addEventListener('animationend',()=>t.remove(),{once:true}); }
   }, 5000);
 }
+
+function _htmlToMarkdown(html) {
+  if (!html) return '';
+  return html
+    .replace(/<h1[^>]*>(.*?)<\/h1>/gi,   '# $1\n')
+    .replace(/<h2[^>]*>(.*?)<\/h2>/gi,   '## $1\n')
+    .replace(/<h3[^>]*>(.*?)<\/h3>/gi,   '### $1\n')
+    .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**')
+    .replace(/<b[^>]*>(.*?)<\/b>/gi,     '**$1**')
+    .replace(/<em[^>]*>(.*?)<\/em>/gi,   '*$1*')
+    .replace(/<i[^>]*>(.*?)<\/i>/gi,     '*$1*')
+    .replace(/<u[^>]*>(.*?)<\/u>/gi,     '_$1_')
+    .replace(/<li[^>]*>(.*?)<\/li>/gi,   '- $1\n')
+    .replace(/<ul[^>]*>|<\/ul>/gi,       '')
+    .replace(/<ol[^>]*>|<\/ol>/gi,       '')
+    .replace(/<br\s*\/?>/gi,            '\n')
+    .replace(/<p[^>]*>(.*?)<\/p>/gi,     '$1\n\n')
+    .replace(/<div[^>]*>(.*?)<\/div>/gi, '$1\n')
+    .replace(/<[^>]+>/g,                  '')
+    .replace(/&amp;/g,  '&')
+    .replace(/&lt;/g,   '<')
+    .replace(/&gt;/g,   '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function _esc(s)     { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function _escAttr(s) { return String(s||'').replace(/"/g,'&quot;'); }

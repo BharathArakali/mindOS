@@ -1,6 +1,6 @@
 /* ============================================================
-   habits.js — Habit Tracker
-   Create habits · Daily check-ins · Streaks · Heatmap
+   routines.js — Habit Tracker
+   Create routines · Daily check-ins · Streaks · Heatmap
    ============================================================ */
 
 import { Storage, KEYS } from './storage.js';
@@ -30,14 +30,14 @@ export function destroy() {
 /* ── Render ── */
 function _render() {
   if (!_container) return;
-  const habits  = _getHabits();
+  const routines  = _getStreaks();
   const today   = toDateKey();
 
   _container.innerHTML = `
     <div class="hab-wrap">
       <div class="hab-header">
         <div>
-          <h2 class="hab-title">Habits</h2>
+          <h2 class="hab-title">Streaks</h2>
           <p class="hab-subtitle">${_dateLabel()}</p>
         </div>
         <div class="hab-header-actions">
@@ -82,36 +82,36 @@ function _render() {
       </div>
 
       <!-- Today view -->
-      ${_view === 'today' ? _renderToday(habits, today) : _renderManage(habits)}
+      ${_view === 'today' ? _renderToday(routines, today) : _renderManage(routines)}
     </div>`;
 
   _attachEvents();
 }
 
 /* ── Today view ── */
-function _renderToday(habits, today) {
-  if (!habits.length) return _renderEmpty();
+function _renderToday(routines, today) {
+  if (!routines.length) return _renderEmpty();
 
   const logs     = _getLogs();
   const todayLog = logs[today] || {};
-  const done     = habits.filter(h => todayLog[h.id]).length;
+  const done     = routines.filter(h => todayLog[h.id]).length;
 
   return `
     <!-- Progress bar -->
     <div class="hab-progress-wrap">
       <div class="hab-progress-label">
-        <span>${done} of ${habits.length} done today</span>
-        <span class="hab-progress-pct">${habits.length ? Math.round((done/habits.length)*100) : 0}%</span>
+        <span>${done} of ${routines.length} done today</span>
+        <span class="hab-progress-pct">${routines.length ? Math.round((done/routines.length)*100) : 0}%</span>
       </div>
       <div class="hab-progress-track">
         <div class="hab-progress-fill"
-             style="width:${habits.length ? (done/habits.length)*100 : 0}%"></div>
+             style="width:${routines.length ? (done/routines.length)*100 : 0}%"></div>
       </div>
     </div>
 
     <!-- Habit list -->
     <div class="hab-list">
-      ${habits.map(h => {
+      ${routines.map(h => {
         const checked = !!todayLog[h.id];
         const streak  = _calcStreak(h.id, logs, today);
         const hex     = HABIT_COLORS.find(c=>c.id===h.color)?.color || '#5B6EF5';
@@ -141,17 +141,17 @@ function _renderToday(habits, today) {
     <div class="hab-week-wrap">
       <div class="hab-section-label">This week</div>
       <div class="hab-week-grid">
-        ${_renderWeekGrid(habits, logs)}
+        ${_renderWeekGrid(routines, logs)}
       </div>
     </div>`;
 }
 
 /* ── Manage view ── */
-function _renderManage(habits) {
-  if (!habits.length) return _renderEmpty();
+function _renderManage(routines) {
+  if (!routines.length) return _renderEmpty();
   return `
     <div class="hab-manage-list">
-      ${habits.map(h => {
+      ${routines.map(h => {
         const hex = HABIT_COLORS.find(c=>c.id===h.color)?.color || '#5B6EF5';
         return `
           <div class="hab-manage-item">
@@ -184,7 +184,7 @@ function _renderEmpty() {
            style="color:var(--text-faint)">
         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
       </svg>
-      <p class="empty-state__title">No habits yet</p>
+      <p class="empty-state__title">No routines yet — hit + to start your first streak.</p>
       <p class="empty-state__body">Hit "New habit" to start building your daily routine.</p>
     </div>`;
 }
@@ -206,7 +206,7 @@ function _renderMiniHeatmap(habitId, logs) {
 }
 
 /* ── Week grid ── */
-function _renderWeekGrid(habits, logs) {
+function _renderWeekGrid(routines, logs) {
   const days = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date(); d.setDate(d.getDate() - i);
@@ -215,8 +215,8 @@ function _renderWeekGrid(habits, logs) {
 
   return days.map(day => {
     const log   = logs[day] || {};
-    const done  = habits.filter(h => log[h.id]).length;
-    const pct   = habits.length ? done / habits.length : 0;
+    const done  = routines.filter(h => log[h.id]).length;
+    const pct   = routines.length ? done / routines.length : 0;
     const label = new Date(day + 'T12:00:00').toLocaleDateString('en-GB', { weekday:'short' });
     const isToday = day === toDateKey();
     return `
@@ -339,7 +339,7 @@ function _calcStreak(habitId, logs, today) {
 }
 
 /* ── Helpers ── */
-function _getHabits() { return (Storage.get(KEYS.HABITS, []) || []).filter(h => !h.archived); }
+function _getStreaks() { return (Storage.get(KEYS.HABITS, []) || []).filter(h => !h.archived); }
 function _getLogs()   { return Storage.get(KEYS.HABIT_LOGS, {}) || {}; }
 function _dateLabel() {
   return new Date().toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long' });

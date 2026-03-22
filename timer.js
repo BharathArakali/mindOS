@@ -36,7 +36,7 @@ export function init(container) {
 export function destroy() {
   clearInterval(_tick); _tick = null;
   Distraction.stopTracking();
-  FocusMusic.stop();
+  FocusMusic.stopAll();
   if (_keyFn) document.removeEventListener('keydown', _keyFn);
   if (_zenMode) { document.body.classList.remove('zen-mode'); _zenMode = false; }
   _editMode     = false;
@@ -150,6 +150,37 @@ function _render() {
         </div>
       </div>
 
+      <!-- Focus music player -->
+      <div class="timer-music-bar">
+        <div class="timer-music-label">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M9 18V5l12-2v13"/>
+            <circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+          </svg>
+          Ambient sounds
+        </div>
+        <div class="timer-music-sounds">
+          ${FocusMusic.SOUNDS.map(s => `
+            <button class="music-sound-btn${FocusMusic.getPlaying()===s.id?' active':''}"
+                    data-sound="${s.id}" title="${s.desc}">
+              <span class="music-sound-icon">${s.icon}</span>
+              <span class="music-sound-label">${s.label}</span>
+            </button>`).join('')}
+        </div>
+        <div class="timer-music-vol">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
+          </svg>
+          <input type="range" class="music-vol-slider" id="music-vol"
+                 min="0" max="100" value="${Math.round(FocusMusic.getVolume()*100)}" style="width:100%;" title="${Math.round(FocusMusic.getVolume()*100)}%"/>
+        </div>
+      </div>
+
+      ${_historyView ? _renderHistory() : ''}
+
     </div>`;
 
   _updateRing();
@@ -182,8 +213,8 @@ function _wire() {
 
   /* Focus music */
   _container.querySelectorAll('.music-sound-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const isNowPlaying = FocusMusic.toggle(btn.dataset.sound);
+    btn.addEventListener('click', async () => {
+      const isNowPlaying = await FocusMusic.toggle(btn.dataset.sound);
       _container.querySelectorAll('.music-sound-btn').forEach(b =>
         b.classList.toggle('active', b.dataset.sound === btn.dataset.sound && isNowPlaying)
       );

@@ -1,261 +1,288 @@
 /* ============================================================
    focusmusic.js — Ambient Focus Music
-   Pure Web Audio API — no external files needed.
-   Sounds: Brown noise · White noise · Rain · Lo-fi beats
+   Pure Web Audio API — zero external files.
    ============================================================ */
 
-const AudioContext = window.AudioContext || window.webkitAudioContext;
-
-let _ctx        = null;
-let _playing    = null; // current sound id
-let _gainNode   = null;
-let _sources    = [];   // active audio nodes
-let _volume     = 0.4;
-
-/* ── Sound definitions ── */
-const SOUNDS = [
-  { id: 'brown', label: 'Brown noise',  icon: '🌊', desc: 'Deep, warm rumble' },
-  { id: 'white', label: 'White noise',  icon: '📡', desc: 'Pure static mask' },
-  { id: 'rain',  label: 'Rain',         icon: '🌧', desc: 'Steady rainfall'  },
-  { id: 'lofi',  label: 'Lo-fi beats',  icon: '🎵', desc: 'Soft rhythmic tones' },
-  { id: 'forest',label: 'Forest',       icon: '🌿', desc: 'Birds & wind'     },
-  { id: 'cafe',  label: 'Café',         icon: '☕', desc: 'Gentle chatter'   },
+export const SOUNDS = [
+  { id:'brown',  label:'Brown noise', icon:'🌊', desc:'Deep warm rumble'   },
+  { id:'white',  label:'White noise', icon:'📡', desc:'Pure static mask'   },
+  { id:'rain',   label:'Rain',        icon:'🌧', desc:'Steady rainfall'    },
+  { id:'lofi',   label:'Lo-fi',       icon:'🎵', desc:'Soft rhythmic tones'},
+  { id:'forest', label:'Forest',      icon:'🌿', desc:'Birds and wind'     },
+  { id:'cafe',   label:'Café',        icon:'☕', desc:'Gentle background'  },
 ];
 
-/* ── Public API ── */
+let _ctx      = null;
+let _master   = null;   // master GainNode
+let _playing  = null;
+let _nodes    = [];     // all running nodes for cleanup
+let _volume   = 0.08;   // 8% default — subtle background
+
 export function getPlaying() { return _playing; }
-export function getVolume()  { return _volume; }
+export function getVolume()  { return _volume;  }
 
-export async function play(soundId) {
-  await _ensureCtx();
-  stop();
-  _playing = soundId;
-  _gainNode = _ctx.createGain();
-  _gainNode.gain.value = _volume;
-  _gainNode.connect(_ctx.destination);
-  _generateSound(soundId);
-}
-
-export function stop() {
-  _sources.forEach(s => { try { s.stop(); } catch {} });
-  _sources = [];
-  if (_gainNode) { _gainNode.disconnect(); _gainNode = null; }
-  _playing = null;
+/* Returns true if now playing, false if stopped */
+export async function toggle(soundId) {
+  if (_playing === soundId) {
+    _stop();
+    return false;
+  }
+  await _play(soundId);
+  return true;
 }
 
 export function setVolume(v) {
   _volume = Math.max(0, Math.min(1, v));
-  if (_gainNode) _gainNode.gain.setTargetAtTime(_volume, _ctx.currentTime, 0.05);
+  if (_master) _master.gain.linearRampToValueAtTime(_volume, _ctx.currentTime + 0.05);
 }
 
-export async function toggle(soundId) {
-  if (_playing === soundId) { stop(); return false; }
-  await play(soundId);
-  return true;
-}
+export function stopAll() { _stop(); }
 
-export { SOUNDS };
+/* ── Internal ── */
+async function _play(soundId) {
+  _stop();
 
-/* ── Context ── */
-async function _ensureCtx() {
-  if (!_ctx) _ctx = new AudioContext();
+  // Create / resume AudioContext inside user gesture
+  if (!_ctx) {
+    const Ctor = window.AudioContext || window.webkitAudioContext;
+    if (!Ctor) { alert('Web Audio not supported in this browser.'); return; }
+    _ctx = new Ctor();
+  }
   if (_ctx.state === 'suspended') await _ctx.resume();
-}
 
-/* ── Sound generators ── */
-function _generateSound(id) {
-  switch (id) {
-    case 'brown':  _brownNoise();  break;
-    case 'white':  _whiteNoise();  break;
-    case 'rain':   _rainSound();   break;
-    case 'lofi':   _lofiBeats();   break;
-    case 'forest': _forestSound(); break;
-    case 'cafe':   _cafeSound();   break;
+  _master = _ctx.createGain();
+  _master.gain.value = _volume;
+  _master.connect(_ctx.destination);
+
+  _playing = soundId;
+
+  switch (soundId) {
+    case 'brown':  _brown();  break;
+    case 'white':  _white();  break;
+    case 'rain':   _rain();   break;
+    case 'lofi':   _lofi();   break;
+    case 'forest': _forest(); break;
+    case 'cafe':   _cafe();   break;
   }
 }
 
-/* Brown noise — filtered white noise, deep rumble */
-function _brownNoise() {
-  const bufSize = _ctx.sampleRate * 4;
-  const buf     = _ctx.createBuffer(1, bufSize, _ctx.sampleRate);
-  const data    = buf.getChannelData(0);
-  let last = 0;
-  for (let i = 0; i < bufSize; i++) {
-    const white = Math.random() * 2 - 1;
-    data[i] = (last + 0.02 * white) / 1.02;
-    last    = data[i];
-    data[i] *= 3.5;
+function _stop() {
+  _playing = null;
+  _nodes.forEach(n => {
+    try {
+      if (typeof n.stop  === 'function') n.stop(0);
+      if (typeof n.disconnect === 'function') n.disconnect();
+    } catch {}
+    if (n._timer) clearTimeout(n._timer);
+  });
+  _nodes = [];
+  if (_master) { try { _master.disconnect(); } catch {} _master = null; }
+}
+
+/* ── Noise buffer factory ── */
+function _noiseBuffer(seconds, type = 'white') {
+  const sr  = _ctx.sampleRate;
+  const len = sr * seconds;
+  const buf = _ctx.createBuffer(1, len, sr);
+  const d   = buf.getChannelData(0);
+
+  if (type === 'brown') {
+    let last = 0;
+    for (let i = 0; i < len; i++) {
+      const w = Math.random() * 2 - 1;
+      d[i] = last = (last + 0.02 * w) / 1.02;
+    }
+    // normalise
+    let max = 0;
+    for (let i = 0; i < len; i++) if (Math.abs(d[i]) > max) max = Math.abs(d[i]);
+    for (let i = 0; i < len; i++) d[i] /= max;
+  } else {
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
   }
+  return buf;
+}
+
+function _loopNoise(buf, dest, gain = 1) {
   const src = _ctx.createBufferSource();
-  src.buffer = buf; src.loop = true;
-  const filter = _ctx.createBiquadFilter();
-  filter.type = 'lowpass'; filter.frequency.value = 300;
-  src.connect(filter); filter.connect(_gainNode);
-  src.start(); _sources.push(src);
+  src.buffer = buf;
+  src.loop   = true;
+  const g = _ctx.createGain();
+  g.gain.value = gain;
+  src.connect(g); g.connect(dest);
+  src.start();
+  _nodes.push(src, g);
+  return src;
 }
 
-/* White noise — flat spectrum */
-function _whiteNoise() {
-  const bufSize = _ctx.sampleRate * 2;
-  const buf     = _ctx.createBuffer(1, bufSize, _ctx.sampleRate);
-  const data    = buf.getChannelData(0);
-  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
-  const src = _ctx.createBufferSource();
-  src.buffer = buf; src.loop = true;
-  src.connect(_gainNode); src.start(); _sources.push(src);
+function _filter(type, freq, dest) {
+  const f = _ctx.createBiquadFilter();
+  f.type = type; f.frequency.value = freq;
+  f.connect(dest);
+  _nodes.push(f);
+  return f;
 }
 
-/* Rain — layered filtered noise with shimmer */
-function _rainSound() {
-  // Heavy rain base
-  _addFilteredNoise(400, 'bandpass', 0.6);
-  // Light drizzle shimmer
-  _addFilteredNoise(2000, 'bandpass', 0.15);
-  // Rumble
-  _addFilteredNoise(80, 'lowpass', 0.3);
+/* ── Sounds ── */
+function _brown() {
+  const buf = _noiseBuffer(4, 'brown');
+  _loopNoise(buf, _master, 1.0);
 }
 
-function _addFilteredNoise(freq, type, gainMult) {
-  const bufSize = _ctx.sampleRate * 2;
-  const buf     = _ctx.createBuffer(1, bufSize, _ctx.sampleRate);
-  const data    = buf.getChannelData(0);
-  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
-  const src    = _ctx.createBufferSource();
-  src.buffer   = buf; src.loop = true;
-  const filter = _ctx.createBiquadFilter();
-  filter.type  = type; filter.frequency.value = freq; filter.Q.value = 0.5;
-  const g      = _ctx.createGain(); g.gain.value = gainMult;
-  src.connect(filter); filter.connect(g); g.connect(_gainNode);
-  src.start(); _sources.push(src);
+function _white() {
+  const buf = _noiseBuffer(2, 'white');
+  const lo  = _filter('lowpass', 6000, _master);
+  _loopNoise(buf, lo, 0.6);
 }
 
-/* Lo-fi beats — simple rhythmic pattern with soft tones */
-function _lofiBeats() {
-  const bpm    = 75;
-  const beat   = 60 / bpm;
-  const now    = _ctx.currentTime;
-  const bars   = 8;
+function _rain() {
+  const buf = _noiseBuffer(3, 'white');
+  // Main rain body
+  const bp1 = _filter('bandpass', 800, _master);
+  bp1.Q.value = 0.3;
+  _loopNoise(buf, bp1, 1.0);
+  // High drizzle
+  const bp2 = _filter('bandpass', 3000, _master);
+  bp2.Q.value = 0.5;
+  _loopNoise(buf, bp2, 0.3);
+  // Low rumble
+  const lp = _filter('lowpass', 120, _master);
+  _loopNoise(buf, lp, 0.5);
+}
 
-  // Kick pattern
-  const kicks  = [0, 2, 4, 6];
-  // Hi-hat pattern (every half beat)
-  const hats   = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5];
-  // Chord tones for pad
-  const chords = [261.63, 329.63, 392.00, 523.25]; // C major
+function _lofi() {
+  const bpm  = 76;
+  const beat = 60 / bpm;
+  const now  = _ctx.currentTime + 0.05;
+  const bars = 8;
 
-  for (let bar = 0; bar < bars; bar++) {
-    const barStart = now + bar * 8 * beat;
-
-    // Kick drum (sine burst)
-    kicks.forEach(k => _scheduleKick(barStart + k * beat));
-    // Hi-hat (short filtered noise burst)
-    hats.forEach(h  => _scheduleHat(barStart + h * beat));
-    // Soft pad chord
-    if (bar % 2 === 0) _schedulePad(chords, barStart, 4 * beat);
+  for (let b = 0; b < bars; b++) {
+    const t0 = now + b * 4 * beat;
+    // Kick: beats 0, 2
+    [0, 2].forEach(k => _kick(t0 + k * beat));
+    // Snare: beats 1, 3
+    [1, 3].forEach(k => _snare(t0 + k * beat));
+    // Hi-hat: every eighth note
+    for (let h = 0; h < 8; h++) _hat(t0 + h * beat * 0.5);
+    // Pad every 2 bars
+    if (b % 2 === 0) _pad([261.63, 329.63, 392.00], t0, 2 * beat * 4);
   }
 
-  // Restart loop
-  const restartTimer = setTimeout(() => {
-    if (_playing === 'lofi') _lofiBeats();
-  }, bars * 8 * beat * 1000 - 100);
-  // Store handle as pseudo-source for cleanup
-  _sources.push({ stop: () => clearTimeout(restartTimer) });
+  // Loop
+  const dur = bars * 4 * beat * 1000 - 80;
+  const timer = { _timer: setTimeout(() => { if (_playing === 'lofi') _lofi(); }, dur) };
+  _nodes.push(timer);
 }
 
-function _scheduleKick(t) {
-  const osc  = _ctx.createOscillator();
-  const gain = _ctx.createGain();
-  osc.type   = 'sine';
-  osc.frequency.setValueAtTime(120, t);
-  osc.frequency.exponentialRampToValueAtTime(40, t + 0.3);
-  gain.gain.setValueAtTime(0.6, t);
-  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
-  osc.connect(gain); gain.connect(_gainNode);
+function _kick(t) {
+  const osc = _ctx.createOscillator();
+  const g   = _ctx.createGain();
+  osc.frequency.setValueAtTime(180, t);
+  osc.frequency.exponentialRampToValueAtTime(40, t + 0.35);
+  g.gain.setValueAtTime(0.9, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+  osc.connect(g); g.connect(_master);
   osc.start(t); osc.stop(t + 0.4);
+  _nodes.push(osc, g);
 }
 
-function _scheduleHat(t) {
-  const bufSize = 512;
-  const buf     = _ctx.createBuffer(1, bufSize, _ctx.sampleRate);
-  const data    = buf.getChannelData(0);
-  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
-  const src    = _ctx.createBufferSource(); src.buffer = buf;
-  const filter = _ctx.createBiquadFilter();
-  filter.type  = 'highpass'; filter.frequency.value = 8000;
-  const gain   = _ctx.createGain();
-  gain.gain.setValueAtTime(0.15, t);
-  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
-  src.connect(filter); filter.connect(gain); gain.connect(_gainNode);
-  src.start(t); _sources.push(src);
+function _snare(t) {
+  const noise = _noiseBuffer(0.2, 'white');
+  const src   = _ctx.createBufferSource();
+  src.buffer  = noise;
+  const bp    = _ctx.createBiquadFilter();
+  bp.type = 'bandpass'; bp.frequency.value = 1200; bp.Q.value = 0.7;
+  const g = _ctx.createGain();
+  g.gain.setValueAtTime(0.4, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+  src.connect(bp); bp.connect(g); g.connect(_master);
+  src.start(t); src.stop(t + 0.15);
+  _nodes.push(src, bp, g);
 }
 
-function _schedulePad(freqs, t, duration) {
+function _hat(t) {
+  const noise = _noiseBuffer(0.05, 'white');
+  const src   = _ctx.createBufferSource();
+  src.buffer  = noise;
+  const hp    = _ctx.createBiquadFilter();
+  hp.type = 'highpass'; hp.frequency.value = 9000;
+  const g = _ctx.createGain();
+  g.gain.setValueAtTime(0.2, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+  src.connect(hp); hp.connect(g); g.connect(_master);
+  src.start(t); src.stop(t + 0.05);
+  _nodes.push(src, hp, g);
+}
+
+function _pad(freqs, t, dur) {
   freqs.forEach(freq => {
-    const osc  = _ctx.createOscillator();
-    const gain = _ctx.createGain();
-    osc.type   = 'sine';
+    const osc = _ctx.createOscillator();
+    const g   = _ctx.createGain();
+    osc.type  = 'sine';
     osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0, t);
-    gain.gain.linearRampToValueAtTime(0.04, t + 0.3);
-    gain.gain.setValueAtTime(0.04, t + duration - 0.3);
-    gain.gain.linearRampToValueAtTime(0, t + duration);
-    osc.connect(gain); gain.connect(_gainNode);
-    osc.start(t); osc.stop(t + duration);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.06, t + 0.4);
+    g.gain.setValueAtTime(0.06, t + dur - 0.4);
+    g.gain.linearRampToValueAtTime(0, t + dur);
+    osc.connect(g); g.connect(_master);
+    osc.start(t); osc.stop(t + dur);
+    _nodes.push(osc, g);
   });
 }
 
-/* Forest — birds chirping + wind */
-function _forestSound() {
-  _addFilteredNoise(600, 'bandpass', 0.2);  // wind mid
-  _addFilteredNoise(150, 'lowpass',  0.15); // wind low
-  // Schedule bird chirps
-  _scheduleBirds();
+function _forest() {
+  const buf = _noiseBuffer(3, 'white');
+  // Wind layers
+  const bp1 = _filter('bandpass', 500, _master); bp1.Q.value = 0.3;
+  _loopNoise(buf, bp1, 0.4);
+  const lp  = _filter('lowpass', 200, _master);
+  _loopNoise(buf, lp, 0.3);
+  // Birds
+  _bird();
 }
 
-function _scheduleBirds() {
-  const chirp = () => {
-    if (_playing !== 'forest') return;
-    const freq = 1800 + Math.random() * 1200;
-    const osc  = _ctx.createOscillator();
-    const gain = _ctx.createGain();
-    osc.type   = 'sine';
-    osc.frequency.setValueAtTime(freq, _ctx.currentTime);
-    osc.frequency.setValueAtTime(freq * 1.15, _ctx.currentTime + 0.05);
-    osc.frequency.setValueAtTime(freq, _ctx.currentTime + 0.1);
-    gain.gain.setValueAtTime(0, _ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.08, _ctx.currentTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.001, _ctx.currentTime + 0.15);
-    osc.connect(gain); gain.connect(_gainNode);
-    osc.start(); osc.stop(_ctx.currentTime + 0.15);
-    const next = setTimeout(chirp, 1500 + Math.random() * 3000);
-    _sources.push({ stop: () => clearTimeout(next) });
-  };
-  chirp();
+function _bird() {
+  if (_playing !== 'forest') return;
+  const freq = 1600 + Math.random() * 1400;
+  const osc  = _ctx.createOscillator();
+  const g    = _ctx.createGain();
+  const t    = _ctx.currentTime;
+  osc.frequency.setValueAtTime(freq, t);
+  osc.frequency.setValueAtTime(freq * 1.2, t + 0.06);
+  osc.frequency.setValueAtTime(freq, t + 0.12);
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(0.12, t + 0.03);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+  osc.connect(g); g.connect(_master);
+  osc.start(t); osc.stop(t + 0.16);
+  _nodes.push(osc, g);
+  const next = { _timer: setTimeout(_bird, 1000 + Math.random() * 3500) };
+  _nodes.push(next);
 }
 
-/* Café — gentle hubbub with soft background noise */
-function _cafeSound() {
-  _addFilteredNoise(800,  'bandpass', 0.1);
-  _addFilteredNoise(200,  'lowpass',  0.2);
-  _addFilteredNoise(3000, 'bandpass', 0.05);
-  // Random "clunk" sounds (cups, chairs)
-  _scheduleCafeEvents();
+function _cafe() {
+  const buf = _noiseBuffer(3, 'white');
+  // Murmur bed
+  const bp = _filter('bandpass', 700, _master); bp.Q.value = 0.2;
+  _loopNoise(buf, bp, 0.35);
+  const lp = _filter('lowpass', 300, _master);
+  _loopNoise(buf, lp, 0.25);
+  // Clinking cups
+  _clink();
 }
 
-function _scheduleCafeEvents() {
-  const clunk = () => {
-    if (_playing !== 'cafe') return;
-    const freq = 200 + Math.random() * 300;
-    const osc  = _ctx.createOscillator();
-    const gain = _ctx.createGain();
-    osc.type   = 'triangle';
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0.07, _ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, _ctx.currentTime + 0.3);
-    osc.connect(gain); gain.connect(_gainNode);
-    osc.start(); osc.stop(_ctx.currentTime + 0.3);
-    const next = setTimeout(clunk, 3000 + Math.random() * 7000);
-    _sources.push({ stop: () => clearTimeout(next) });
-  };
-  clunk();
+function _clink() {
+  if (_playing !== 'cafe') return;
+  const freq = 900 + Math.random() * 600;
+  const osc  = _ctx.createOscillator();
+  const g    = _ctx.createGain();
+  osc.type   = 'triangle';
+  osc.frequency.value = freq;
+  const t    = _ctx.currentTime;
+  g.gain.setValueAtTime(0.12, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+  osc.connect(g); g.connect(_master);
+  osc.start(t); osc.stop(t + 0.4);
+  _nodes.push(osc, g);
+  const next = { _timer: setTimeout(_clink, 3000 + Math.random() * 8000) };
+  _nodes.push(next);
 }
