@@ -221,6 +221,17 @@ function _renderEditor(note) {
         <div class="fmt-group fmt-group--right">
           <span class="notes-autosave-indicator" id="save-indicator"></span>
 
+          <!-- Voice typing button -->
+          <button class="fmt-btn" id="voice-btn" title="Voice typing">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8"  y1="23" x2="16" y2="23"/>
+            </svg>
+          </button>
+
           ${colorOn ? `
           <button class="fmt-btn color-tag-btn" id="color-picker-btn"
                   title="Color tag"
@@ -420,6 +431,11 @@ function _attachEditorEvents() {
     _softDelete(_activeId);
   });
 
+  /* Voice typing */
+  _container.querySelector('#voice-btn')?.addEventListener('click', () => {
+    _toggleVoice(content);
+  });
+
   /* Color picker toggle */
   _container.querySelector('#color-picker-btn')?.addEventListener('click', e => {
     e.stopPropagation();
@@ -443,6 +459,89 @@ function _attachEditorEvents() {
     const popup = _container?.querySelector('#color-picker-popup');
     if (popup) popup.style.display = 'none';
   }, { once: false });
+}
+
+/* ── Voice typing ── */
+let _recognition = null;
+let _voiceActive = false;
+
+function _toggleVoice(contentEl) {
+  const btn = _container?.querySelector('#voice-btn');
+  if (!btn) return;
+
+  // Check browser support
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    _showToast('Voice typing not supported in this browser. Try Chrome.', 'warning', 4000);
+    return;
+  }
+
+  if (_voiceActive) {
+    // Stop
+    _recognition?.stop();
+    return;
+  }
+
+  // Start
+  _recognition = new SpeechRecognition();
+  _recognition.continuous    = true;
+  _recognition.interimResults = true;
+  _recognition.lang          = 'en-US';
+
+  let _finalTranscript = '';
+
+  _recognition.onstart = () => {
+    _voiceActive = true;
+    btn.style.color      = 'var(--error)';
+    btn.style.background = 'var(--error-dim)';
+    btn.title            = 'Stop voice typing';
+    _showToast('Listening… speak now', 'success', 2500);
+  };
+
+  _recognition.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) _finalTranscript += t + ' ';
+      else interim = t;
+    }
+    // Insert final text at cursor position in contenteditable
+    if (_finalTranscript) {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount && contentEl.contains(sel.anchorNode)) {
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        range.insertNode(document.createTextNode(_finalTranscript));
+        range.collapse(false);
+      } else {
+        // Fallback: append to end
+        contentEl.innerHTML += _finalTranscript;
+      }
+      _finalTranscript = '';
+      // Trigger save
+      contentEl.dispatchEvent(new Event('input'));
+    }
+  };
+
+  _recognition.onerror = (e) => {
+    console.error('Speech recognition error:', e.error);
+    _showToast(`Voice error: ${e.error}`, 'warning', 3000);
+    _stopVoice(btn);
+  };
+
+  _recognition.onend = () => { _stopVoice(btn); };
+
+  _recognition.start();
+}
+
+function _stopVoice(btn) {
+  _voiceActive    = false;
+  _recognition    = null;
+  if (btn) {
+    btn.style.color      = '';
+    btn.style.background = '';
+    btn.title            = 'Voice typing';
+  }
 }
 
 /* ── Note operations ── */

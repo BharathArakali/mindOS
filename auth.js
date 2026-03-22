@@ -265,9 +265,16 @@ async function _doSignup(container) {
 
   try {
     await _sendEmail(email, otp, name);
-  } catch {
-    console.info(`[mindOS_ DEV] Signup OTP for ${email}: ${otp}`);
-    _showToast(`Dev mode — OTP: ${otp}`, 'warning', 14000);
+    _showToast('Verification code sent to your email', 'success', 4000);
+  } catch (err) {
+    // Only fall back to dev toast if credentials are still placeholders
+    if (EMAILJS_SERVICE_ID === 'YOUR_SERVICE_ID') {
+      console.info('[mindOS_ DEV] EmailJS not configured — OTP:', otp);
+      _showToast(`Dev mode — OTP: ${otp}`, 'warning', 14000);
+    } else {
+      console.error('[mindOS_] EmailJS send failed:', err);
+      _showToast(`Email failed. Your OTP: ${otp}`, 'warning', 14000);
+    }
   }
 
   window.location.hash = '#auth/verify-otp';
@@ -325,9 +332,15 @@ async function _doForgot(container) {
 
   try {
     await _sendEmail(email, otp, db[email].name);
-  } catch {
-    console.info(`[mindOS_ DEV] Reset OTP for ${email}: ${otp}`);
-    _showToast(`Dev mode — OTP: ${otp}`, 'warning', 14000);
+    _showToast('Reset code sent to your email', 'success', 4000);
+  } catch (err) {
+    if (EMAILJS_SERVICE_ID === 'YOUR_SERVICE_ID') {
+      console.info('[mindOS_ DEV] EmailJS not configured — OTP:', otp);
+      _showToast(`Dev mode — OTP: ${otp}`, 'warning', 14000);
+    } else {
+      console.error('[mindOS_] EmailJS send failed:', err);
+      _showToast(`Email failed. Your OTP: ${otp}`, 'warning', 14000);
+    }
   }
 
   window.location.hash = '#auth/verify-otp';
@@ -510,18 +523,27 @@ async function _doReset(container) {
 }
 
 /* ── EmailJS ────────────────────────────────────────────── */
+let _emailjsReady = false;
+
 async function _sendEmail(toEmail, otp, name) {
   if (typeof emailjs === 'undefined') {
-    const s  = document.createElement('script');
-    s.src    = 'https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js';
-    document.head.appendChild(s);
-    await new Promise((res, rej) => { s.onload = res; s.onerror = rej; });
-    emailjs.init(EMAILJS_PUBLIC_KEY);
+    throw new Error('EmailJS script not loaded — check index.html');
   }
-  return emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
-    to_email: toEmail, otp_code: otp,
-    user_name: name || 'there', expiry_minutes: '10',
+  if (!_emailjsReady) {
+    emailjs.init(EMAILJS_PUBLIC_KEY);
+    _emailjsReady = true;
+  }
+  console.log('[mindOS_] Sending OTP email to:', toEmail,
+    '| Service:', EMAILJS_SERVICE_ID,
+    '| Template:', EMAILJS_TEMPLATE_ID);
+  const result = await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+    to_email:       toEmail,
+    otp_code:       String(otp),
+    user_name:      name || 'there',
+    expiry_minutes: '10',
   });
+  console.log('[mindOS_] Email sent successfully:', result);
+  return result;
 }
 
 /* ── Helpers ────────────────────────────────────────────── */
