@@ -201,6 +201,16 @@ function _renderItem(r) {
         </div>
       </div>
 
+      <button class="rem-cal-btn" data-id="${r.id}" data-text="${r.text.replace(/"/g,'&quot;')}"
+              data-dt="${r.datetime}" title="Add to Google Calendar">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+          <line x1="16" y1="2" x2="16" y2="6"/>
+          <line x1="8"  y1="2" x2="8"  y2="6"/>
+          <line x1="3"  y1="10" x2="21" y2="10"/>
+        </svg>
+      </button>
       <button class="rem-delete-btn" data-id="${r.id}" title="Delete">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
              stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -257,6 +267,10 @@ function _attachEvents() {
   /* Delete */
   _container.querySelectorAll('.rem-delete-btn').forEach(btn => {
     btn.addEventListener('click', () => _deleteReminder(btn.dataset.id));
+  });
+
+  _container.querySelectorAll('.rem-cal-btn').forEach(btn => {
+    btn.addEventListener('click', () => _addToCalendar(btn.dataset.id));
   });
 }
 
@@ -444,6 +458,26 @@ function _getReminders() { return Storage.get(KEYS.REMINDERS, []); }
 function _showErr(el, msg) {
   el.textContent = msg;
   el.style.display = 'block';
+}
+
+function _addToCalendar(id) {
+  const r = _getReminders().find(r => r.id === id);
+  if (!r) return;
+
+  const dt    = new Date(r.datetime);
+  const pad   = n => String(n).padStart(2, '0');
+  // Google Calendar format: YYYYMMDDTHHmmss
+  const fmt   = d =>
+    `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+  const end   = new Date(dt.getTime() + 30 * 60 * 1000); // 30-min default duration
+  const title = encodeURIComponent(r.text);
+  const dates = `${fmt(dt)}/${fmt(end)}`;
+  const details = encodeURIComponent('Created in mindOS_');
+
+  const url = `https://calendar.google.com/calendar/render?action=TEMPLATE` +
+    `&text=${title}&dates=${dates}&details=${details}`;
+
+  window.open(url, '_blank', 'noopener');
 }
 
 function _showUndoToast(msg, onUndo) {

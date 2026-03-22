@@ -1390,3 +1390,171 @@ body.zen-mode .timer-tabs { display: none; }
   background: var(--error-dim) !important;
   animation: ringPulse 1s ease-in-out infinite;
 }
+
+/* ── Session History ──────────────────────────────────────── */
+.timer-history-btn {
+  position: absolute;
+  bottom: 6px; left: 6px;
+  width: 26px; height: 26px;
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.timer-history-btn:hover,
+.timer-history-btn.active { background: var(--accent-dim); color: var(--accent); }
+
+.timer-history {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 16px;
+  animation: riseIn 250ms ease both;
+}
+.timer-history-title {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-muted);
+  margin-bottom: 12px; padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.timer-history-list { display: flex; flex-direction: column; gap: 8px; }
+.timer-history-item {
+  display: flex; align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.timer-history-item__left { display: flex; flex-direction: column; gap: 2px; }
+.timer-history-item__date { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
+.timer-history-item__dur  { font-size: 13px; font-weight: 600; color: var(--text); }
+.timer-history-item__right { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.timer-history-score      { font-family: var(--font-mono); font-size: 16px; font-weight: 500; }
+.timer-history-score-lbl  { font-size: 10px; color: var(--text-faint); letter-spacing: 0.06em; }
+
+/* ── Habits Module ────────────────────────────────────────── */
+.hab-wrap {
+  max-width: 640px; margin: 0 auto;
+  display: flex; flex-direction: column; gap: 20px;
+  padding-bottom: 40px;
+}
+.hab-header {
+  display: flex; align-items: flex-start;
+  justify-content: space-between; gap: 12px; flex-wrap: wrap;
+}
+.hab-title    { font-size: 22px; font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
+.hab-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 3px; }
+.hab-header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.hab-view-btn { font-size: 12px; padding: 6px 14px; }
+.hab-view-btn.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
+
+/* Add form */
+.hab-form { display: flex; flex-direction: column; gap: 14px; }
+.hab-color-row { display: flex; gap: 8px; }
+.hab-color-swatch {
+  width: 24px; height: 24px; border-radius: 50%;
+  border: 3px solid transparent; cursor: pointer;
+  transition: transform var(--t-fast), border-color var(--t-fast);
+}
+.hab-color-swatch:hover { transform: scale(1.2); }
+.hab-color-swatch.selected { border-color: var(--text); transform: scale(1.15); }
+.hab-form-actions { display: flex; gap: 8px; justify-content: flex-end;
+  padding-top: 4px; border-top: 1px solid var(--border); }
+
+/* Progress bar */
+.hab-progress-wrap { display: flex; flex-direction: column; gap: 6px; }
+.hab-progress-label {
+  display: flex; justify-content: space-between;
+  font-size: 13px; color: var(--text-muted);
+}
+.hab-progress-pct { font-family: var(--font-mono); color: var(--accent); font-weight: 600; }
+.hab-progress-track {
+  height: 6px; background: var(--border); border-radius: var(--r-full); overflow: hidden;
+}
+.hab-progress-fill {
+  height: 100%; background: var(--accent); border-radius: var(--r-full);
+  transition: width 400ms cubic-bezier(0.4,0,0.2,1);
+}
+
+/* Habit list */
+.hab-list { display: flex; flex-direction: column; gap: 8px; }
+.hab-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-md); cursor: pointer;
+  transition: border-color var(--t-fast), background var(--t-fast);
+  animation: riseIn 300ms ease both;
+}
+.hab-item:hover { border-color: var(--accent); }
+.hab-item--done { background: var(--surface-raised); }
+
+.hab-check {
+  width: 24px; height: 24px; border-radius: 50%;
+  border: 2px solid var(--border); background: none;
+  cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.hab-check:hover { border-color: var(--accent); }
+
+.hab-item-body { flex: 1; min-width: 0; }
+.hab-item-name   { font-size: 14px; font-weight: 500; margin-bottom: 2px; }
+.hab-item-streak { font-size: 11px; color: var(--text-muted); }
+
+/* Mini heatmap */
+.hab-mini-heat { display: flex; gap: 3px; flex-shrink: 0; }
+.hab-mini-cell {
+  width: 10px; height: 10px; border-radius: 2px;
+  background: var(--border);
+  transition: background var(--t-fast);
+}
+.hab-mini-cell.done { background: var(--accent); opacity: 0.8; }
+
+/* Week grid */
+.hab-section-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.hab-week-wrap { background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: 16px; }
+.hab-week-grid { display: flex; gap: 8px; align-items: flex-end; height: 80px; }
+.hab-week-day  { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; }
+.hab-week-bar-wrap { flex: 1; width: 100%; display: flex; align-items: flex-end; }
+.hab-week-bar { width: 100%; border-radius: 3px 3px 0 0; min-height: 3px; transition: height 400ms ease; }
+.hab-week-label { font-size: 10px; }
+
+/* Manage view */
+.hab-manage-list { display: flex; flex-direction: column; gap: 8px; }
+.hab-manage-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md);
+}
+.hab-manage-dot  { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.hab-manage-name { flex: 1; font-size: 14px; font-weight: 500; color: var(--text); }
+.hab-manage-actions { display: flex; gap: 8px; align-items: center; }
+.hab-del-btn {
+  width: 28px; height: 28px; border-radius: var(--r-sm);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-faint); background: none; border: none; cursor: pointer;
+  transition: color var(--t-fast), background var(--t-fast);
+}
+.hab-del-btn:hover { color: var(--error); background: var(--error-dim); }
+
+/* ── Reminders calendar button ────────────────────────────── */
+.rem-cal-btn {
+  width: 28px; height: 28px;
+  border-radius: var(--r-sm);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-faint); background: none; border: none; cursor: pointer;
+  transition: color var(--t-fast), background var(--t-fast);
+  flex-shrink: 0;
+}
+.rem-cal-btn:hover { color: var(--accent); background: var(--accent-dim); }
