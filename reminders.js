@@ -4,6 +4,7 @@
    ============================================================ */
 
 import { Storage, KEYS } from './storage.js';
+import * as BG from './background.js';
 import { uuid, formatDate } from './utils.js';
 
 /* Scheduled setTimeout handles — cleared on destroy */
@@ -23,8 +24,8 @@ export function init(container) {
 }
 
 export function destroy() {
-  _timers.forEach(t => clearTimeout(t));
-  _timers.clear();
+  // DO NOT cancel reminder timers — background.js owns scheduling
+  // Just detach UI
   _container = null;
 }
 
@@ -349,8 +350,7 @@ function _handleSave() {
   if (editId) {
     /* Edit existing */
     const old = _getReminders().find(r => r.id === editId);
-    clearTimeout(_timers.get(editId));
-    _timers.delete(editId);
+    BG.cancelReminderTimer(editId);
 
     Storage.update(KEYS.REMINDERS, list =>
       list.map(r => r.id === editId
@@ -395,8 +395,7 @@ function _deleteReminder(id) {
   const reminder = _getReminders().find(r => r.id === id);
   if (!reminder) return;
 
-  clearTimeout(_timers.get(id));
-  _timers.delete(id);
+  BG.cancelReminderTimer(id);
 
   Storage.update(KEYS.REMINDERS, list => list.filter(r => r.id !== id), []);
   _render();

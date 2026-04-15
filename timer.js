@@ -1,15 +1,17 @@
 /* ============================================================
    timer.js — Focus Engine
-   Click timer to edit inline · No settings panel / scroll
+   Click timer to edit inline · Background timer via BG module
    ============================================================ */
 
 import { Storage, KEYS } from './storage.js';
 import { uuid, formatTime, toDateKey } from './utils.js';
 import * as Distraction  from './distraction.js';
-import * as FocusMusic  from './focusmusic.js';
+import * as BG           from './background.js';
+import * as FocusMusic   from './focusmusic.js';
 
 const DEFAULTS = { workMins:25, shortBreakMins:5, longBreakMins:15, sessionsUntilLong:4 };
 
+/* ── Module state ── */
 let _state        = 'idle';
 let _mode         = 'work';
 let _remaining    = 0;
@@ -18,31 +20,56 @@ let _tick         = null;
 let _sessionId    = null;
 let _workCount    = 0;
 let _zenMode      = false;
-let _editMode     = false;  // true when user is editing timer values inline
-let _historyView  = false; // true when showing session history
+let _settingsOpen = false;
+let _editMode     = false;
+let _historyView  = false;
 let _container    = null;
 let _keyFn        = null;
+let _clockInterval= null;
+
+/* ── Public API ── */
+export function getState() {
+  return { timerState:_state, mode:_mode, remaining:_remaining,
+           planned:_planned, workCount:_workCount, sessionId:_sessionId };
+}
 
 export function init(container) {
   _container = container;
   _workCount = Storage.get('mindos_work_count', 0);
-  const s = Storage.get(KEYS.SETTINGS, DEFAULTS);
-  _applyMode('work', s);
+
+  // Restore state if timer was running during navigation
+  const saved = BG.loadTimerState();
+  if (saved && saved.timerState !== 'idle') {
+    _state     = 'paused';
+    _mode      = saved.mode      || 'work';
+    _remaining = saved.remaining || 0;
+    _planned   = saved.planned   || 0;
+    _sessionId = saved.sessionId || null;
+    _workCount = saved.workCount || _workCount;
+    BG.clearTimerState();
+  } else {
+    const s = Storage.get(KEYS.SETTINGS, DEFAULTS);
+    _applyMode('work', s);
+  }
+
   _render();
   _keyFn = _onKey.bind(null);
   document.addEventListener('keydown', _keyFn);
 }
 
 export function destroy() {
-  clearInterval(_tick); _tick = null;
+  // Stop tick but preserve _state/_remaining so getState() works after destroy
+  if (_tick)         { clearInterval(_tick);         _tick = null; }
+  if (_clockInterval){ clearInterval(_clockInterval); _clockInterval = null; }
   Distraction.stopTracking();
   FocusMusic.stopAll();
   if (_keyFn) document.removeEventListener('keydown', _keyFn);
   if (_zenMode) { document.body.classList.remove('zen-mode'); _zenMode = false; }
-  _editMode     = false;
-  _historyView  = false;
-  _container = null;
+  _editMode    = false;
+  _historyView = false;
+  _container   = null;
 }
+
 
 /* ── Render ── */
 function _render() {
@@ -280,6 +307,8 @@ function _toggle() {
 
 function _start() {
   if (_editMode) _cancelEdit();
+  // Always clear any existing tick before creating new one
+  if (_tick) { clearInterval(_tick); _tick = null; }
   _state     = 'running';
   _sessionId = _sessionId || uuid();
   Distraction.startTracking(_sessionId);
@@ -299,6 +328,7 @@ function _pause() {
   clearInterval(_tick); _tick = null;
   _state = 'paused';
   Distraction.stopTracking();
+  BG.saveTimerState(getState()); // save on pause so navigation can restore
   const btn = _get('t-main');
   if (btn) btn.textContent = 'Resume';
   _get('t-display')?.classList.remove('is-running');
@@ -307,6 +337,8 @@ function _pause() {
 function _doReset() {
   clearInterval(_tick); _tick = null;
   Distraction.stopTracking();
+  BG.stopBackgroundTimer();
+  BG.clearTimerState();
   const s = { ...DEFAULTS, ...Storage.get(KEYS.SETTINGS, DEFAULTS) };
   _applyMode(_mode, s);
   _editMode = false;
@@ -316,6 +348,9 @@ function _doReset() {
 function _complete() {
   clearInterval(_tick); _tick = null;
   Distraction.stopTracking();
+  BG.stopBackgroundTimer(); // ensure BG isn't also counting
+  BG.clearTimerState();
+
   if (_mode === 'work') {
     _workCount++;
     Storage.set('mindos_work_count', _workCount);
@@ -329,8 +364,10 @@ function _complete() {
     const s = { ...DEFAULTS, ...Storage.get(KEYS.SETTINGS, DEFAULTS) };
     _applyMode('work', s);
   }
-  _editMode = false;
-  _render();
+  _editMode    = false;
+  _historyView = false;
+  // Only re-render if we're still on the focus page
+  if (_container) _render();
 }
 
 function _applyMode(mode, settings) {

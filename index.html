@@ -43,6 +43,9 @@
       <!-- Left: logo -->
       <span class="header-logo" id="header-logo" aria-label="mindOS_">mindOS<span class="cursor">_</span></span>
 
+      <!-- Live header clock (desktop only) -->
+      <div class="header-clock" id="header-clock"></div>
+
       <!-- Centre: module tab nav — shown only inside modules, hidden on home/auth -->
       <nav class="header-nav" id="header-nav" aria-label="Modules"></nav>
 
@@ -128,14 +131,14 @@
       const regs = await navigator.serviceWorker.getRegistrations();
       for (const reg of regs) {
         const sw = reg.active || reg.waiting || reg.installing;
-        if (sw && !sw.scriptURL.includes('mindos-v5')) {
+        if (sw && !sw.scriptURL.includes('mindos-v6')) {
           await reg.unregister();
         }
       }
       // Clear all caches except current version
       const keys = await caches.keys();
       for (const key of keys) {
-        if (key !== 'mindos-v5') await caches.delete(key);
+        if (key !== 'mindos-v6') await caches.delete(key);
       }
       // Register fresh
       navigator.serviceWorker.register('./service-worker.js').catch(console.error);

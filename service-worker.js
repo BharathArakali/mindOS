@@ -2,7 +2,7 @@
    service-worker.js — Cache-first PWA
    Bump CACHE version on every deploy to force fresh files.
    ============================================================ */
-const CACHE = 'mindos-v5';
+const CACHE = 'mindos-v6';
 
 const ASSETS = [
   './',
@@ -22,6 +22,7 @@ const ASSETS = [
   './focusmusic.js',
   './onboarding.js',
   './commandpalette.js',
+  './background.js',
   './theme.js',
   './storage.js',
   './utils.js',
@@ -51,6 +52,35 @@ self.addEventListener('activate', e => {
         })
       ))
       .then(() => self.clients.claim())
+  );
+});
+
+/* Push notification handler */
+self.addEventListener('push', e => {
+  const data = e.data?.json?.() || {};
+  e.waitUntil(
+    self.registration.showNotification(data.title || 'mindOS_ Reminder', {
+      body:    data.body  || '',
+      icon:    './icon-192.png',
+      badge:   './icon-192.png',
+      tag:     data.tag   || 'mindos',
+      vibrate: [200, 100, 200],
+    })
+  );
+});
+
+/* Notification click — focus the app window */
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(
+    clients.matchAll({ type:'window', includeUncontrolled:true }).then(list => {
+      for (const c of list) {
+        if (c.url.includes('mindOS') || c.url.includes('localhost') || c.url.includes('github.io')) {
+          return c.focus();
+        }
+      }
+      return clients.openWindow('./');
+    })
   );
 });
 

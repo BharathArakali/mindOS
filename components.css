@@ -678,9 +678,14 @@ body.zen-mode .timer-wrap {
   justify-content: center;
   background: var(--bg);
   z-index: 50;
-  padding: 0;
-  gap: 28px;
+  padding: 0 24px;
+  gap: 24px;
   max-width: 100%;
+}
+/* Music bar in zen mode: centered and properly sized */
+body.zen-mode .timer-music-bar {
+  max-width: 420px;
+  width: 100%;
 }
 body.zen-mode .timer-stats,
 body.zen-mode .timer-tabs { display: none; }
@@ -1562,13 +1567,14 @@ body.zen-mode .timer-tabs { display: none; }
 /* ── Focus Music Player ───────────────────────────────────── */
 .timer-music-bar {
   width: 100%;
+  max-width: 420px;           /* never wider than the timer ring area */
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
-  padding: 12px 14px;
+  padding: 10px 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 .timer-music-label {
   display: flex; align-items: center; gap: 6px;
@@ -1600,7 +1606,9 @@ body.zen-mode .timer-tabs { display: none; }
   color: var(--text-faint);
 }
 .music-vol-slider {
-  flex: 1; height: 3px; accent-color: var(--accent);
+  width: 120px;              /* fixed width — never stretches */
+  flex-shrink: 0;
+  height: 3px; accent-color: var(--accent);
   cursor: pointer; border-radius: 2px;
 }
 
@@ -1991,13 +1999,15 @@ body.zen-mode .timer-tabs { display: none; }
   .profile-badge__icon { font-size: 18px; }
 
   /* Timer music bar — scrollable on mobile */
-  .timer-music-sounds { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+  .timer-music-bar { max-width: 100%; padding: 8px 10px; gap: 6px; }
+  .timer-music-sounds { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; gap: 5px; }
   .timer-music-sounds::-webkit-scrollbar { display: none; }
-  .music-sound-btn { flex-shrink: 0; }
+  .music-sound-btn { flex-shrink: 0; padding: 4px 8px; font-size: 11px; }
+  .music-sound-icon { font-size: 12px; }
 
-  /* Volume slider full width */
-  .timer-music-vol { padding: 0 4px; }
-  .music-vol-slider { min-width: 80px; }
+  /* Volume: compact on mobile */
+  .timer-music-vol { gap: 6px; }
+  .music-vol-slider { width: 90px; }
 }
 
 @media (max-width: 400px) {
@@ -2058,4 +2068,187 @@ body.zen-mode .timer-tabs { display: none; }
 .settings-theme-btn.active {
   background: var(--accent-dim); border-color: var(--accent);
   color: var(--accent); font-weight: 600;
+}
+
+/* ── Timer running indicator (header) ─────────────────────── */
+.timer-running-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  cursor: pointer;
+  margin-left: 8px;
+  animation: ringPulse 2s ease-in-out infinite;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.timer-running-dot:hover { background: var(--accent-hover); }
+
+/* ── Header clock (desktop only) ─────────────────────────── */
+.header-clock {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  user-select: none;
+  /* Visibility controlled by JS in _updateHeaderNav */
+}
+
+/* Hide on mobile — timer module has its own clock */
+@media (max-width: 767px) {
+  .header-clock { display: none; }
+}
+
+/* ── Timer module clock ───────────────────────────────────── */
+.timer-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  opacity: 0.5;
+  transition: opacity var(--t-fast);
+  user-select: none;
+}
+.timer-clock:hover { opacity: 0.8; }
+.timer-clock-time {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text);
+  letter-spacing: 0.08em;
+}
+.timer-clock-sec {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.timer-clock-date {
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ── Timer running dot (in header-right) ─────────────────── */
+.timer-running-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: var(--r-full);
+  cursor: pointer;
+  animation: ringPulse 2s ease-in-out infinite;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.timer-running-dot:hover { background: var(--accent-hover); }
+
+@media (max-width: 640px) {
+  /* Compact dot on mobile */
+  .timer-running-dot { font-size: 9px; padding: 2px 7px; }
+  .timer-clock-time { font-size: 16px; }
+}
+
+/* ── Streaks card view ────────────────────────────────────── */
+.hab-card-view {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 20px;
+  align-items: start;
+}
+
+.hab-card {
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  position: relative;
+  min-height: 260px;
+  display: flex;
+  align-items: flex-end;
+  transition: box-shadow var(--t-base);
+}
+.hab-card:hover { box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+
+.hab-card-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.1) 60%);
+  pointer-events: none;
+}
+
+.hab-card-content {
+  position: relative; z-index: 1;
+  padding: 24px; width: 100%;
+  display: flex; flex-direction: column; gap: 14px;
+}
+
+.hab-card-title {
+  font-size: 22px; font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.hab-card-stats {
+  display: flex; align-items: center; gap: 0;
+}
+.hab-card-stat {
+  display: flex; flex-direction: column; gap: 2px; flex: 1; text-align: center;
+}
+.hab-card-stat__val {
+  font-family: var(--font-mono); font-size: 24px; font-weight: 600;
+}
+.hab-card-stat__lbl { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; }
+.hab-card-divider { width: 1px; height: 36px; background: rgba(255,255,255,0.2); }
+
+.hab-card-routines { display: flex; flex-wrap: wrap; gap: 6px; }
+.hab-card-pill {
+  padding: 3px 10px; border-radius: var(--r-full);
+  border: 1px solid; font-size: 12px; font-weight: 500;
+  transition: all var(--t-fast);
+}
+.hab-card-pill.done { font-weight: 600; }
+
+/* Card settings panel */
+.hab-card-settings {
+  display: flex; flex-direction: column; gap: 14px;
+}
+.hab-card-settings-title {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  padding-bottom: 8px; border-bottom: 1px solid var(--border);
+}
+.hab-card-settings-actions { padding-top: 4px; border-top: 1px solid var(--border); }
+
+.hab-photo-upload {
+  position: relative;
+  border: 2px dashed var(--border);
+  border-radius: var(--r-sm);
+  padding: 20px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  color: var(--text-muted); font-size: 13px;
+  cursor: pointer; transition: border-color var(--t-fast), background var(--t-fast);
+  text-align: center;
+}
+.hab-photo-upload:hover {
+  border-color: var(--accent); background: var(--accent-dim);
+}
+.hab-photo-upload svg { color: var(--text-faint); }
+
+@media (max-width: 640px) {
+  .hab-card-view { grid-template-columns: 1fr; }
+  .hab-card { min-height: 200px; }
+  .hab-card-stat__val { font-size: 18px; }
 }

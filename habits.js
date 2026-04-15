@@ -15,8 +15,9 @@ const HABIT_COLORS = [
   { id:'pink',   color:'#F783AC' },
 ];
 
-let _container = null;
-let _view      = 'today'; // 'today' | 'manage'
+let _container   = null;
+let _view        = 'today'; // 'today' | 'manage' | 'card'
+const CARD_KEY   = 'mindos_streaks_card';
 
 export function init(container) {
   _container = container;
@@ -45,13 +46,15 @@ function _render() {
                   id="hab-view-today">Today</button>
           <button class="btn btn-secondary hab-view-btn${_view==='manage'?' active':''}"
                   id="hab-view-manage">Manage</button>
+          <button class="btn btn-secondary hab-view-btn${_view==='card'?' active':''}"
+                  id="hab-view-card" title="Card view">🃏</button>
           <button class="btn btn-primary" id="hab-add-btn">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
               <line x1="12" y1="5" x2="12" y2="19"/>
               <line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
-            New habit
+            New routine
           </button>
         </div>
       </div>
@@ -82,7 +85,9 @@ function _render() {
       </div>
 
       <!-- Today view -->
-      ${_view === 'today' ? _renderToday(routines, today) : _renderManage(routines)}
+      ${_view === 'today' ? _renderToday(routines, today) :
+        _view === 'manage' ? _renderManage(routines) :
+        _renderCardView(routines, today)}
     </div>`;
 
   _attachEvents();
@@ -185,7 +190,7 @@ function _renderEmpty() {
         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
       </svg>
       <p class="empty-state__title">No routines yet — hit + to start your first streak.</p>
-      <p class="empty-state__body">Hit "New habit" to start building your daily routine.</p>
+      <p class="empty-state__body">Hit "New routine" to start building your daily routine.</p>
     </div>`;
 }
 
@@ -242,6 +247,9 @@ function _attachEvents() {
   _container.querySelector('#hab-view-manage')?.addEventListener('click', () => {
     _view = 'manage'; _render();
   });
+  _container.querySelector('#hab-view-card')?.addEventListener('click', () => {
+    _view = 'card'; _render();
+  });
   _container.querySelector('#hab-add-btn')?.addEventListener('click', () => {
     const wrap = _container.querySelector('#hab-form-wrap');
     if (wrap) { wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none'; }
@@ -281,6 +289,130 @@ function _attachEvents() {
   _container.querySelectorAll('.hab-del-btn').forEach(btn => {
     btn.addEventListener('click', () => _deleteHabit(btn.dataset.id));
   });
+
+  // Card customization
+  _container.querySelector('#card-save-btn')?.addEventListener('click', () => {
+    const title  = _container.querySelector('#card-title-input')?.value.trim() || 'My Streaks';
+    const cur    = Storage.get(CARD_KEY, {});
+    Storage.set(CARD_KEY, { ...cur, title });
+    _render();
+  });
+  _container.querySelector('#card-remove-photo')?.addEventListener('click', () => {
+    const cur = Storage.get(CARD_KEY, {});
+    delete cur.photo;
+    Storage.set(CARD_KEY, cur);
+    _render();
+  });
+  const photoInput = _container.querySelector('#card-photo-input');
+  photoInput?.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const cur = Storage.get(CARD_KEY, {});
+      Storage.set(CARD_KEY, { ...cur, photo: ev.target.result });
+      _render();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ── Card view ── */
+function _renderCardView(routines, today) {
+  const card  = Storage.get(CARD_KEY, {});
+  const logs  = _getLogs();
+  const done  = routines.filter(h => (logs[today]||{})[h.id]).length;
+  const total = routines.length;
+  const pct   = total ? Math.round((done/total)*100) : 0;
+
+  // Overall best streak across all routines
+  let best = 0;
+  routines.forEach(h => {
+    const s = _calcStreak(h.id, logs, today);
+    if (s > best) best = s;
+  });
+
+  const bgStyle = card.photo
+    ? 'background-image:url(' + card.photo + ');background-size:cover;background-position:center;'
+    : 'background:var(--surface);';
+
+  const textColor = card.photo ? '#fff' : 'var(--text)';
+  const subColor  = card.photo ? 'rgba(255,255,255,0.75)' : 'var(--text-muted)';
+
+  return '<div class="hab-card-view">' +
+
+    // The card itself
+    '<div class="hab-card" id="hab-card" style="' + bgStyle + '">' +
+      (card.photo ? '<div class="hab-card-overlay"></div>' : '') +
+      '<div class="hab-card-content">' +
+        '<div class="hab-card-title" style="color:' + textColor + '">' +
+          (card.title || 'My Streaks') +
+        '</div>' +
+        '<div class="hab-card-stats">' +
+          '<div class="hab-card-stat">' +
+            '<div class="hab-card-stat__val" style="color:' + textColor + '">' + done + '/' + total + '</div>' +
+            '<div class="hab-card-stat__lbl" style="color:' + subColor + '">Today</div>' +
+          '</div>' +
+          '<div class="hab-card-divider"></div>' +
+          '<div class="hab-card-stat">' +
+            '<div class="hab-card-stat__val" style="color:' + textColor + '">' + best + '🔥</div>' +
+            '<div class="hab-card-stat__lbl" style="color:' + subColor + '">Best streak</div>' +
+          '</div>' +
+          '<div class="hab-card-divider"></div>' +
+          '<div class="hab-card-stat">' +
+            '<div class="hab-card-stat__val" style="color:' + textColor + '">' + pct + '%</div>' +
+            '<div class="hab-card-stat__lbl" style="color:' + subColor + '">Complete</div>' +
+          '</div>' +
+        '</div>' +
+        // Routine pills
+        '<div class="hab-card-routines">' +
+          routines.slice(0,6).map(h => {
+            const checked = !!(logs[today]||{})[h.id];
+            const hex = HABIT_COLORS.find(c=>c.id===h.color)?.color || '#5B6EF5';
+            return '<span class="hab-card-pill' + (checked ? ' done' : '') + '"' +
+              ' style="border-color:' + hex + ';' + (checked ? 'background:' + hex + ';color:#fff;' : 'color:' + (card.photo?'#fff':'var(--text)') + ';') + '">' +
+              (checked ? '✓ ' : '') + _esc(h.name) +
+              '</span>';
+          }).join('') +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+
+    // Card customization panel
+    '<div class="hab-card-settings card">' +
+      '<div class="hab-card-settings-title">Customise card</div>' +
+
+      '<div class="form-group">' +
+        '<label class="form-label">Card title</label>' +
+        '<input class="input" id="card-title-input" type="text"' +
+          ' value="' + _escAttr(card.title || 'My Streaks') + '"' +
+          ' placeholder="My Streaks"/>' +
+      '</div>' +
+
+      '<div class="form-group">' +
+        '<label class="form-label">Background photo</label>' +
+        '<div class="hab-photo-upload" id="hab-photo-drop">' +
+          '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"' +
+            ' stroke="currentColor" stroke-width="1.5" stroke-linecap="round">' +
+            '<rect x="3" y="3" width="18" height="18" rx="2"/>' +
+            '<circle cx="8.5" cy="8.5" r="1.5"/>' +
+            '<polyline points="21 15 16 10 5 21"/>' +
+          '</svg>' +
+          '<span>' + (card.photo ? 'Photo set — click to change' : 'Click to upload photo') + '</span>' +
+          '<input type="file" id="card-photo-input" accept="image/*"' +
+            ' style="position:absolute;inset:0;opacity:0;cursor:pointer;"/>' +
+        '</div>' +
+      '</div>' +
+
+      (card.photo ? '<button class="btn btn-secondary" id="card-remove-photo"' +
+        ' style="font-size:12px;padding:6px 12px;">Remove photo</button>' : '') +
+
+      '<div class="hab-card-settings-actions">' +
+        '<button class="btn btn-primary btn-block" id="card-save-btn">Save card</button>' +
+      '</div>' +
+    '</div>' +
+
+  '</div>';
 }
 
 /* ── Habit CRUD ── */
@@ -344,6 +476,7 @@ function _getLogs()   { return Storage.get(KEYS.HABIT_LOGS, {}) || {}; }
 function _dateLabel() {
   return new Date().toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long' });
 }
+function _escAttr(s) { return String(s||'').replace(/"/g,'&quot;'); }
 function _esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
