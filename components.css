@@ -2252,3 +2252,81 @@ body.zen-mode .timer-tabs { display: none; }
   .hab-card { min-height: 200px; }
   .hab-card-stat__val { font-size: 18px; }
 }
+
+/* ============================================================
+   Timer — Live clock bar + MM:SS split display
+   Add these rules to components.css
+   ============================================================ */
+
+/* Live clock bar — sits above mode tabs */
+.timer-clock-bar {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.timer-clock {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  background: var(--surface-raised);
+  padding: 4px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  user-select: none;
+}
+
+/* MM:SS split display — replaces single timer-display */
+.timer-display-split {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  cursor: default;
+  line-height: 1;
+}
+
+.timer-seg {
+  font-family: var(--font-mono);
+  font-size: 52px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  transition: color 0.3s ease;
+  line-height: 1;
+}
+
+.timer-seg--colon {
+  font-size: 44px;
+  color: var(--text-muted);
+  padding: 0 2px;
+  cursor: default !important;
+}
+
+/* Mins and secs are clickable when not running */
+.timer-seg--mins,
+.timer-seg--secs {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 2px 4px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.timer-seg--mins:hover,
+.timer-seg--secs:hover {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* Running state — not clickable, accent color */
+.timer-seg--running {
+  color: var(--accent);
+  cursor: default !important;
+  background: transparent !important;
+}
+
+/* Zen mode — hide clock bar */
+.zen-mode .timer-clock-bar {
+  display: none;
+}

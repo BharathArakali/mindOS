@@ -1,6 +1,6 @@
 /* ============================================================
    timer.js — Focus Engine
-   Click timer to edit inline · Background timer via BG module
+   Editable MM:SS · Live clock · Background timer via BG module
    ============================================================ */
 
 import { Storage, KEYS } from './storage.js';
@@ -20,8 +20,7 @@ let _tick         = null;
 let _sessionId    = null;
 let _workCount    = 0;
 let _zenMode      = false;
-let _settingsOpen = false;
-let _editMode     = false;
+let _editMode     = false;   // 'mins' | 'secs' | false
 let _historyView  = false;
 let _container    = null;
 let _keyFn        = null;
@@ -37,7 +36,6 @@ export function init(container) {
   _container = container;
   _workCount = Storage.get('mindos_work_count', 0);
 
-  // Restore state if timer was running during navigation
   const saved = BG.loadTimerState();
   if (saved && saved.timerState !== 'idle') {
     _state     = 'paused';
@@ -55,10 +53,10 @@ export function init(container) {
   _render();
   _keyFn = _onKey.bind(null);
   document.addEventListener('keydown', _keyFn);
+  _startClock();
 }
 
 export function destroy() {
-  // Stop tick but preserve _state/_remaining so getState() works after destroy
   if (_tick)         { clearInterval(_tick);         _tick = null; }
   if (_clockInterval){ clearInterval(_clockInterval); _clockInterval = null; }
   Distraction.stopTracking();
@@ -70,6 +68,22 @@ export function destroy() {
   _container   = null;
 }
 
+/* ── Live clock ── */
+function _startClock() {
+  if (_clockInterval) clearInterval(_clockInterval);
+  _clockInterval = setInterval(_tickClock, 1000);
+  _tickClock(); // immediate first render
+}
+
+function _tickClock() {
+  const el = document.getElementById('t-clock');
+  if (!el) return;
+  const now = new Date();
+  const h   = String(now.getHours()).padStart(2, '0');
+  const m   = String(now.getMinutes()).padStart(2, '0');
+  const s   = String(now.getSeconds()).padStart(2, '0');
+  el.textContent = `${h}:${m}:${s}`;
+}
 
 /* ── Render ── */
 function _render() {
@@ -82,8 +96,16 @@ function _render() {
   const streak   = _streak(sessions);
   const CIRC     = 603;
 
+  const remMins = Math.floor(_remaining / 60);
+  const remSecs = _remaining % 60;
+
   _container.innerHTML = `
     <div class="timer-wrap" id="timer-wrap">
+
+      <!-- Live clock -->
+      <div class="timer-clock-bar">
+        <span class="timer-clock" id="t-clock">--:--:--</span>
+      </div>
 
       <!-- Mode tabs -->
       <div class="timer-tabs">
@@ -106,22 +128,37 @@ function _render() {
             stroke-dasharray="${CIRC}" stroke-dashoffset="0"/>
         </svg>
 
-        <!-- Normal view: countdown (clickable to edit) -->
+        <!-- Normal countdown view -->
         <div class="timer-centre" id="t-centre"
              style="${_editMode ? 'display:none' : ''}">
-          <div class="timer-display" id="t-display"
-               title="Click to edit duration">${formatTime(_remaining)}</div>
+
+          <!-- MM:SS — each segment clickable separately -->
+          <div class="timer-display-split" id="t-display-split"
+               title="${_state === 'running' ? '' : 'Click minutes or seconds to edit'}">
+            <span class="timer-seg timer-seg--mins${_state==='running'?' timer-seg--running':''}"
+                  id="t-seg-mins"
+                  data-edit="mins">${String(remMins).padStart(2,'0')}</span>
+            <span class="timer-seg timer-seg--colon${_state==='running'?' timer-seg--running':''}"
+                  id="t-colon">:</span>
+            <span class="timer-seg timer-seg--secs${_state==='running'?' timer-seg--running':''}"
+                  id="t-seg-secs"
+                  data-edit="secs">${String(remSecs).padStart(2,'0')}</span>
+          </div>
+
           <div class="timer-mode-label">${_modeLabel()}</div>
-          <div class="timer-edit-hint">tap to edit</div>
+          ${_state !== 'running' ? '<div class="timer-edit-hint">tap mins or secs to edit</div>' : ''}
         </div>
 
-        <!-- Edit view: inline inputs inside ring -->
+        <!-- Edit view: shows inside ring when editing mins or secs -->
         <div class="timer-edit-centre" id="t-edit"
              style="${_editMode ? '' : 'display:none'}">
-          <div class="timer-edit-label">minutes</div>
+          <div class="timer-edit-label" id="t-edit-label">
+            ${_editMode === 'secs' ? 'seconds (0–59)' : 'minutes (1–120)'}
+          </div>
           <input class="timer-edit-input" id="t-edit-val" type="number"
-                 min="1" max="120"
-                 value="${Math.round(_planned/60)}"/>
+                 min="${_editMode === 'secs' ? 0 : 1}"
+                 max="${_editMode === 'secs' ? 59 : 120}"
+                 value="${_editMode === 'secs' ? remSecs : remMins}"/>
           <div class="timer-edit-actions">
             <button class="timer-edit-btn timer-edit-cancel" id="t-edit-cancel">✕</button>
             <button class="timer-edit-btn timer-edit-save"   id="t-edit-save">✓</button>
@@ -148,7 +185,7 @@ function _render() {
         </svg>
       </button>
 
-      <!-- Controls — only Reset + Start/Pause -->
+      <!-- Controls -->
       <div class="timer-controls">
         <button class="btn btn-secondary timer-btn-reset" id="t-reset">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
@@ -202,7 +239,9 @@ function _render() {
             <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
           </svg>
           <input type="range" class="music-vol-slider" id="music-vol"
-                 min="0" max="100" value="${Math.round(FocusMusic.getVolume()*100)}" style="width:100%;" title="${Math.round(FocusMusic.getVolume()*100)}%"/>
+                 min="0" max="100" value="${Math.round(FocusMusic.getVolume()*100)}"
+                 style="width:100%;"
+                 title="${Math.round(FocusMusic.getVolume()*100)}%"/>
         </div>
       </div>
 
@@ -212,6 +251,7 @@ function _render() {
 
   _updateRing();
   _wire();
+  _startClock(); // restart clock after re-render (new DOM node)
 }
 
 /* ── Wire events ── */
@@ -224,10 +264,16 @@ function _wire() {
     _render();
   });
 
-  /* Clicking the timer display opens inline edit (only when idle/paused) */
-  _get('t-display')?.addEventListener('click', () => {
+  /* Click on minutes segment */
+  _get('t-seg-mins')?.addEventListener('click', () => {
     if (_state === 'running') return;
-    _openEdit();
+    _openEdit('mins');
+  });
+
+  /* Click on seconds segment */
+  _get('t-seg-secs')?.addEventListener('click', () => {
+    if (_state === 'running') return;
+    _openEdit('secs');
   });
 
   /* Edit actions */
@@ -266,27 +312,51 @@ function _wire() {
 function _get(id) { return document.getElementById(id); }
 
 /* ── Inline edit ── */
-function _openEdit() {
-  _editMode = true;
+function _openEdit(part) { // part = 'mins' | 'secs'
+  _editMode = part;
   const centre = _get('t-centre');
   const edit   = _get('t-edit');
+  const label  = _get('t-edit-label');
+  const input  = _get('t-edit-val');
+
   if (centre) centre.style.display = 'none';
   if (edit)   edit.style.display   = 'flex';
-  setTimeout(() => _get('t-edit-val')?.select(), 30);
+  if (label)  label.textContent    = part === 'secs' ? 'seconds (0–59)' : 'minutes (1–120)';
+  if (input) {
+    input.min   = part === 'secs' ? '0' : '1';
+    input.max   = part === 'secs' ? '59' : '120';
+    input.value = part === 'secs' ? String(_remaining % 60) : String(Math.floor(_remaining / 60));
+    setTimeout(() => input.select(), 30);
+  }
 }
 
 function _saveEdit() {
-  const val  = parseInt(_get('t-edit-val')?.value) || 25;
-  const mins = Math.max(1, Math.min(120, val));
+  const raw  = parseInt(_get('t-edit-val')?.value);
+  const currentMins = Math.floor(_remaining / 60);
+  const currentSecs = _remaining % 60;
 
-  /* Save into settings under the current mode key */
+  let newMins = currentMins;
+  let newSecs = currentSecs;
+
+  if (_editMode === 'mins') {
+    newMins = Math.max(0, Math.min(120, isNaN(raw) ? currentMins : raw));
+    // If mins set to 0, keep at least 1 second
+    if (newMins === 0 && newSecs === 0) newSecs = 1;
+  } else if (_editMode === 'secs') {
+    newSecs = Math.max(0, Math.min(59, isNaN(raw) ? currentSecs : raw));
+  }
+
+  const totalSecs = newMins * 60 + newSecs;
+  _remaining = totalSecs;
+  _planned   = totalSecs; // treat edited value as the new planned duration
+
+  /* Persist to settings (minutes portion only, as before) */
   const s   = { ...DEFAULTS, ...Storage.get(KEYS.SETTINGS, DEFAULTS) };
   const key = _mode === 'work' ? 'workMins'
             : _mode === 'shortBreak' ? 'shortBreakMins' : 'longBreakMins';
-  s[key] = mins;
+  s[key] = newMins || 1;
   Storage.set(KEYS.SETTINGS, s);
 
-  _applyMode(_mode, s);
   _editMode = false;
   _render();
 }
@@ -307,31 +377,47 @@ function _toggle() {
 
 function _start() {
   if (_editMode) _cancelEdit();
-  // Always clear any existing tick before creating new one
   if (_tick) { clearInterval(_tick); _tick = null; }
   _state     = 'running';
   _sessionId = _sessionId || uuid();
   Distraction.startTracking(_sessionId);
   _tick = setInterval(() => {
     _remaining--;
-    const el = _get('t-display');
-    if (el) el.textContent = formatTime(_remaining);
+
+    /* Update MM:SS display in-place without full re-render */
+    const minsEl = _get('t-seg-mins');
+    const secsEl = _get('t-seg-secs');
+    if (minsEl) minsEl.textContent = String(Math.floor(_remaining / 60)).padStart(2, '0');
+    if (secsEl) secsEl.textContent = String(_remaining % 60).padStart(2, '0');
+
     _updateRing();
     if (_remaining <= 0) _complete();
   }, 1000);
+
   const btn = _get('t-main');
   if (btn) btn.textContent = 'Pause';
-  _get('t-display')?.classList.add('is-running');
+
+  /* Add running class to segments */
+  _get('t-seg-mins')?.classList.add('timer-seg--running');
+  _get('t-colon')?.classList.add('timer-seg--running');
+  _get('t-seg-secs')?.classList.add('timer-seg--running');
+
+  /* Remove edit hint if present */
+  _container?.querySelector('.timer-edit-hint')?.remove();
 }
 
 function _pause() {
   clearInterval(_tick); _tick = null;
   _state = 'paused';
   Distraction.stopTracking();
-  BG.saveTimerState(getState()); // save on pause so navigation can restore
+  BG.saveTimerState(getState());
   const btn = _get('t-main');
   if (btn) btn.textContent = 'Resume';
-  _get('t-display')?.classList.remove('is-running');
+
+  /* Remove running class */
+  _get('t-seg-mins')?.classList.remove('timer-seg--running');
+  _get('t-colon')?.classList.remove('timer-seg--running');
+  _get('t-seg-secs')?.classList.remove('timer-seg--running');
 }
 
 function _doReset() {
@@ -348,7 +434,7 @@ function _doReset() {
 function _complete() {
   clearInterval(_tick); _tick = null;
   Distraction.stopTracking();
-  BG.stopBackgroundTimer(); // ensure BG isn't also counting
+  BG.stopBackgroundTimer();
   BG.clearTimerState();
 
   if (_mode === 'work') {
@@ -366,7 +452,6 @@ function _complete() {
   }
   _editMode    = false;
   _historyView = false;
-  // Only re-render if we're still on the focus page
   if (_container) _render();
 }
 
@@ -459,4 +544,24 @@ function _notify(msg) {
     new Notification('mindOS_', {body:msg, icon:'./icon-192.png'});
   else if (Notification.permission==='default')
     Notification.requestPermission();
+}
+
+/* ── History ── */
+function _renderHistory() {
+  const sessions = Storage.get(KEYS.SESSIONS, []);
+  const recent   = [...sessions].reverse().slice(0, 10);
+  if (!recent.length) return `<div class="timer-history"><p style="color:var(--text-muted);font-size:13px;text-align:center;padding:16px 0">No sessions yet</p></div>`;
+  return `
+    <div class="timer-history">
+      <div class="timer-history__title">Recent sessions</div>
+      ${recent.map(s => `
+        <div class="timer-history__row">
+          <span class="timer-history__type ${s.type==='work'?'work':'break'}">
+            ${s.type==='work'?'Focus':'Break'}
+          </span>
+          <span class="timer-history__dur">${Math.round((s.actual||s.duration)/60)}m</span>
+          <span class="timer-history__score">${s.focusScore!=null?`${s.focusScore}%`:''}</span>
+          <span class="timer-history__date">${s.date||''}</span>
+        </div>`).join('')}
+    </div>`;
 }

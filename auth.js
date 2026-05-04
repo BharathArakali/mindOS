@@ -1,24 +1,31 @@
 /* ============================================================
-   auth.js — Authentication Module
-   Boot sequence · Login · Signup (with OTP) · Forgot · Reset
+   auth.js — Authentication Module (Supabase v2)
+   Boot sequence · Login · Signup (OTP via Supabase) · Forgot
+   Same public API: init(container) / destroy()
    ============================================================ */
 
-import { Storage, KEYS } from './storage.js';
-import { uuid, hashPassword, generateOTP } from './utils.js';
+import { supabase, Storage, KEYS } from './storage.js';
 
-const EMAILJS_SERVICE_ID  = 'service_txyxy1o';
-const EMAILJS_TEMPLATE_ID = 'template_qbdjqvb';
-const EMAILJS_PUBLIC_KEY  = 'cmvMHvi4CYMoyd_ri';
-
-/* In-memory OTP state — never written to localStorage */
-let _pendingOTP  = null;  // { code, email, expiresAt, forSignup, userData }
-let _bootDone    = false;
+let _bootDone = false;
 
 /* ── Public API ─────────────────────────────────────────── */
-export function init(container) {
+export async function init(container) {
   const route = (window.location.hash || '#auth/login').replace('#auth/', '');
+
+  /* Restore existing session first */
+  const { data: { session } } = await supabase.auth.getSession();
+
+  if (session) {
+    /* Already logged in — load data and go home */
+    await _hydrateUser(session.user);
+    await Storage.load(session.user.id);
+    _goHome(container);
+    return;
+  }
+
   if (!_bootDone && (route === 'login' || route === '')) {
-    _runBootSequence(container).then(() => _renderRoute(container, 'login'));
+    await _runBootSequence(container);
+    _renderRoute(container, 'login');
   } else {
     _renderRoute(container, route);
   }
@@ -78,7 +85,7 @@ function _runBootSequence(container) {
   });
 }
 
-/* ── Shared card wrapper ────────────────────────────────── */
+/* ── Shell ──────────────────────────────────────────────── */
 function _shell(html) {
   return `<div class="auth-outer"><div class="auth-card anim-rise-in">${html}</div></div>`;
 }
@@ -129,9 +136,7 @@ function _renderLogin(container) {
     <div class="auth-divider">or</div>
 
     <button class="btn btn-secondary btn-block" id="guest-btn"
-            style="font-size:13px;">
-      Continue as guest
-    </button>
+            style="font-size:13px;">Continue as guest</button>
   `);
 
   container.querySelector('#l-email').focus();
@@ -139,37 +144,30 @@ function _renderLogin(container) {
     if (e.key === 'Enter') _doLogin(container);
   });
   container.querySelector('#l-btn').addEventListener('click', () => _doLogin(container));
-
-  container.querySelector('#guest-btn').addEventListener('click', () => {
-    _continueAsGuest(container);
-  });
+  container.querySelector('#guest-btn').addEventListener('click', () => _continueAsGuest(container));
 }
 
 async function _doLogin(container) {
-  const email   = container.querySelector('#l-email').value.trim().toLowerCase();
-  const pass    = container.querySelector('#l-pass').value;
-  const errEl   = container.querySelector('#l-error');
-  const btn     = container.querySelector('#l-btn');
+  const email = container.querySelector('#l-email').value.trim().toLowerCase();
+  const pass  = container.querySelector('#l-pass').value;
+  const errEl = container.querySelector('#l-error');
+  const btn   = container.querySelector('#l-btn');
 
   errEl.style.display = 'none';
   if (!email || !pass) return _err(errEl, 'Please fill in all fields.');
 
   btn.disabled = true; btn.textContent = 'Signing in…';
 
-  const db   = Storage.get(KEYS.USERS_DB, {});
-  const user = db[email];
-  if (!user) {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+
+  if (error) {
     btn.disabled = false; btn.textContent = 'Sign in';
-    return _err(errEl, 'No account found with that email.');
+    return _err(errEl, error.message === 'Invalid login credentials'
+      ? 'Incorrect email or password.' : error.message);
   }
 
-  const hash = await hashPassword(pass);
-  if (hash !== user.passwordHash) {
-    btn.disabled = false; btn.textContent = 'Sign in';
-    return _err(errEl, 'Incorrect password.');
-  }
-
-  Storage.set(KEYS.USER, { ...user, passwordHash: undefined });
+  await _hydrateUser(data.user);
+  await Storage.load(data.user.id);
   _goHome(container);
 }
 
@@ -234,50 +232,41 @@ async function _doSignup(container) {
   if (pass.length < 8)  return _err(errEl, 'Password must be at least 8 characters.');
   if (pass !== confirm) return _err(errEl, 'Passwords do not match.');
 
-  const db = Storage.get(KEYS.USERS_DB, {});
-  if (db[email]) return _err(errEl, 'An account with this email already exists.');
+  btn.disabled = true; btn.textContent = 'Creating account…';
 
-  btn.disabled = true; btn.textContent = 'Sending code…';
+  const parts    = name.split(' ');
+  const initials = ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || name[0].toUpperCase();
 
-  const passwordHash = await hashPassword(pass);
-  const parts        = name.split(' ');
-  const initials     = ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || name[0].toUpperCase();
-
-  const userData = {
-    id: uuid(), name, email, avatarInitials: initials,
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    defaultFocusMins: 25,
-    joinedAt: new Date().toISOString(),
-    theme: 'dark',
-    passwordHash,
-  };
-
-  /* Generate OTP and store user data in memory until verified */
-  const otp = generateOTP();
-  _pendingOTP = {
-    code:      otp,
+  /* Supabase signup — sends its own confirmation email by default.
+     We disable email confirm in the dashboard and use OTP instead,
+     so signUp here goes straight through. */
+  const { data, error } = await supabase.auth.signUp({
     email,
-    expiresAt: Date.now() + 10 * 60 * 1000,
-    forSignup: true,
-    userData,
-  };
-  setTimeout(() => { if (_pendingOTP?.forSignup) _pendingOTP = null; }, 10 * 60 * 1000);
+    password: pass,
+    options: {
+      data: { name, avatar_initials: initials },
+      // emailRedirectTo not needed — OTP flow handles confirmation
+    },
+  });
 
-  try {
-    await _sendEmail(email, otp, name);
-    _showToast('Verification code sent to your email', 'success', 4000);
-  } catch (err) {
-    // Only fall back to dev toast if credentials are still placeholders
-    if (EMAILJS_SERVICE_ID === 'YOUR_SERVICE_ID') {
-      console.info('[mindOS_ DEV] EmailJS not configured — OTP:', otp);
-      _showToast(`Dev mode — OTP: ${otp}`, 'warning', 14000);
-    } else {
-      console.error('[mindOS_] EmailJS send failed:', err);
-      _showToast(`Email failed. Your OTP: ${otp}`, 'warning', 14000);
-    }
+  if (error) {
+    btn.disabled = false; btn.textContent = 'Continue';
+    return _err(errEl, error.message);
   }
 
-  window.location.hash = '#auth/verify-otp';
+  /* If Supabase email confirm is ON, user gets a confirm link —
+     redirect them to verify-otp screen which shows a waiting message. */
+  if (data.user && !data.session) {
+    /* Email not yet confirmed — store name for verify screen */
+    sessionStorage.setItem('_pending_signup', JSON.stringify({ email, name, initials }));
+    window.location.hash = '#auth/verify-otp';
+    return;
+  }
+
+  /* Email confirm is OFF — session returned immediately */
+  await _hydrateUser(data.user);
+  await Storage.load(data.user.id);
+  _goHome(container);
 }
 
 /* ── Forgot Password ────────────────────────────────────── */
@@ -286,7 +275,7 @@ function _renderForgot(container) {
     ${_backArrow('#auth/login')}
     <div class="auth-title">Reset password</div>
     <div class="auth-subtitle">
-      Enter your email and we'll send you a 6-digit verification code.
+      We'll send a reset link to your email.
     </div>
 
     <div class="form-group">
@@ -298,7 +287,7 @@ function _renderForgot(container) {
     <span id="f-error" class="form-error" style="display:none;"></span>
 
     <button class="btn btn-primary btn-block btn-lg" id="f-btn"
-            style="margin-top:24px;">Send code</button>
+            style="margin-top:24px;">Send reset link</button>
   `);
 
   container.querySelector('#f-email').focus();
@@ -316,65 +305,39 @@ async function _doForgot(container) {
   errEl.style.display = 'none';
   if (!email) return _err(errEl, 'Please enter your email.');
 
-  const db = Storage.get(KEYS.USERS_DB, {});
-  if (!db[email]) return _err(errEl, 'No account found with that email.');
-
   btn.disabled = true; btn.textContent = 'Sending…';
 
-  const otp = generateOTP();
-  _pendingOTP = {
-    code:      otp,
-    email,
-    expiresAt: Date.now() + 10 * 60 * 1000,
-    forSignup: false,
-  };
-  setTimeout(() => { _pendingOTP = null; }, 10 * 60 * 1000);
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${location.origin}${location.pathname}#auth/reset-password`,
+  });
 
-  try {
-    await _sendEmail(email, otp, db[email].name);
-    _showToast('Reset code sent to your email', 'success', 4000);
-  } catch (err) {
-    if (EMAILJS_SERVICE_ID === 'YOUR_SERVICE_ID') {
-      console.info('[mindOS_ DEV] EmailJS not configured — OTP:', otp);
-      _showToast(`Dev mode — OTP: ${otp}`, 'warning', 14000);
-    } else {
-      console.error('[mindOS_] EmailJS send failed:', err);
-      _showToast(`Email failed. Your OTP: ${otp}`, 'warning', 14000);
-    }
+  if (error) {
+    btn.disabled = false; btn.textContent = 'Send reset link';
+    return _err(errEl, error.message);
   }
 
-  window.location.hash = '#auth/verify-otp';
+  _showToast('Reset link sent — check your email', 'success', 5000);
+  setTimeout(() => { window.location.hash = '#auth/login'; }, 1500);
 }
 
-/* ── Verify OTP ─────────────────────────────────────────── */
+/* ── Verify OTP (Supabase email confirmation) ───────────── */
 function _renderVerifyOTP(container) {
-  const isSignup = _pendingOTP?.forSignup;
-  const emailDisplay = _pendingOTP?.email || 'your email';
+  const pending = JSON.parse(sessionStorage.getItem('_pending_signup') || 'null');
+  const emailDisplay = pending?.email || 'your email';
 
   container.innerHTML = _shell(`
-    ${_backArrow(isSignup ? '#auth/signup' : '#auth/forgot')}
-    <div class="auth-title">${isSignup ? 'Verify email' : 'Check your email'}</div>
+    ${_backArrow('#auth/signup')}
+    <div class="auth-title">Verify email</div>
     <div class="otp-info">
-      We sent a 6-digit code to <strong>${emailDisplay}</strong>.<br/>
-      It expires in 10 minutes.
-    </div>
-
-    <div class="otp-row" id="otp-row">
-      ${[0,1,2,3,4,5].map(i => `
-        <input class="otp-box" id="otp-${i}" type="text"
-               inputmode="numeric" pattern="[0-9]"
-               maxlength="1" autocomplete="off"
-               aria-label="Digit ${i+1} of 6"/>
-      `).join('')}
+      We sent a confirmation link to <strong>${emailDisplay}</strong>.<br/>
+      Click the link in the email, then come back here and press Continue.
     </div>
 
     <span id="otp-error" class="form-error"
           style="display:none;text-align:center;margin-top:10px;"></span>
 
     <button class="btn btn-primary btn-block btn-lg" id="otp-btn"
-            style="margin-top:24px;">
-      ${isSignup ? 'Verify & create account' : 'Verify code'}
-    </button>
+            style="margin-top:24px;">I've confirmed — Continue</button>
 
     <p class="auth-footer">
       Didn't receive it?
@@ -382,97 +345,34 @@ function _renderVerifyOTP(container) {
     </p>
   `);
 
-  _wireOTPBoxes(container);
-  container.querySelector('#otp-0').focus();
-  container.querySelector('#otp-btn').addEventListener('click', () => _doVerifyOTP(container));
+  container.querySelector('#otp-btn').addEventListener('click', async () => {
+    const errEl = container.querySelector('#otp-error');
+    const btn   = container.querySelector('#otp-btn');
+    btn.disabled = true; btn.textContent = 'Checking…';
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      sessionStorage.removeItem('_pending_signup');
+      await _hydrateUser(session.user);
+      await Storage.load(session.user.id);
+      _goHome(container);
+    } else {
+      btn.disabled = false; btn.textContent = 'I\'ve confirmed — Continue';
+      _err(errEl, 'Email not yet confirmed. Click the link in your email first.');
+    }
+  });
+
   container.querySelector('#resend-btn').addEventListener('click', () => {
-    window.location.hash = isSignup ? '#auth/signup' : '#auth/forgot';
+    sessionStorage.removeItem('_pending_signup');
+    window.location.hash = '#auth/signup';
   });
 }
 
-function _wireOTPBoxes(container) {
-  const boxes = container.querySelectorAll('.otp-box');
-  boxes.forEach((box, i) => {
-    box.addEventListener('input', e => {
-      box.value = e.target.value.replace(/\D/g,'').slice(-1);
-      if (box.value && i < boxes.length - 1) boxes[i+1].focus();
-    });
-    box.addEventListener('keydown', e => {
-      if (e.key === 'Backspace' && !box.value && i > 0) {
-        boxes[i-1].focus(); boxes[i-1].value = '';
-      }
-      if (e.key === 'Enter') _doVerifyOTP(container);
-    });
-    box.addEventListener('paste', e => {
-      e.preventDefault();
-      const digits = (e.clipboardData || window.clipboardData)
-        .getData('text').replace(/\D/g,'').slice(0,6);
-      digits.split('').forEach((c, idx) => { if (boxes[idx]) boxes[idx].value = c; });
-      boxes[Math.min(digits.length, 5)].focus();
-    });
-  });
-}
-
-async function _doVerifyOTP(container) {
-  const boxes   = container.querySelectorAll('.otp-box');
-  const row     = container.querySelector('#otp-row');
-  const errEl   = container.querySelector('#otp-error');
-  const btn     = container.querySelector('#otp-btn');
-  const entered = Array.from(boxes).map(b => b.value).join('');
-
-  errEl.style.display = 'none';
-  if (entered.length < 6) return _err(errEl, 'Enter all 6 digits.');
-  if (!_pendingOTP)       return _err(errEl, 'OTP expired. Request a new one.');
-  if (Date.now() > _pendingOTP.expiresAt) {
-    _pendingOTP = null;
-    return _err(errEl, 'Code expired. Request a new one.');
-  }
-
-  if (entered !== _pendingOTP.code) {
-    row.classList.remove('anim-shake');
-    void row.offsetWidth;
-    row.classList.add('anim-shake');
-    boxes.forEach(b => b.classList.add('otp-box--error'));
-    setTimeout(() => {
-      row.classList.remove('anim-shake');
-      boxes.forEach(b => b.classList.remove('otp-box--error'));
-    }, 600);
-    return _err(errEl, 'Incorrect code. Try again.');
-  }
-
-  btn.disabled = true;
-  boxes.forEach(b => b.classList.add('otp-box--success'));
-
-  setTimeout(() => {
-    const card = container.querySelector('.auth-card');
-    card.style.transition = 'opacity 400ms ease';
-    card.style.opacity = '0';
-
-    setTimeout(() => {
-      if (_pendingOTP?.forSignup && _pendingOTP?.userData) {
-        /* Signup flow — save user and log in */
-        const u = _pendingOTP.userData;
-        Storage.update(KEYS.USERS_DB, db => ({ ...db, [u.email]: u }), {});
-        Storage.set(KEYS.USER, { ...u, passwordHash: undefined });
-        _pendingOTP = null;
-        _goHome(container);
-      } else {
-        /* Reset flow — go to reset-password screen */
-        window.location.hash = '#auth/reset-password';
-      }
-    }, 420);
-  }, 350);
-}
-
-/* ── Reset Password ─────────────────────────────────────── */
+/* ── Reset Password (deep-link return) ──────────────────── */
 function _renderResetPassword(container) {
-  if (!_pendingOTP) { window.location.hash = '#auth/forgot'; return; }
-
   container.innerHTML = _shell(`
     <div class="auth-title">New password</div>
-    <div class="auth-subtitle">
-      Choose a strong password for <strong>${_pendingOTP.email}</strong>
-    </div>
+    <div class="auth-subtitle">Choose a strong new password</div>
 
     <div class="form-group">
       <label class="form-label" for="r-pass">New password</label>
@@ -512,63 +412,80 @@ async function _doReset(container) {
 
   btn.disabled = true; btn.textContent = 'Updating…';
 
-  const email = _pendingOTP.email;
-  const hash  = await hashPassword(pass);
-  Storage.update(KEYS.USERS_DB, db => ({
-    ...db, [email]: { ...db[email], passwordHash: hash }
-  }), {});
-  _pendingOTP = null;
+  const { error } = await supabase.auth.updateUser({ password: pass });
+  if (error) {
+    btn.disabled = false; btn.textContent = 'Update password';
+    return _err(errEl, error.message);
+  }
+
+  await supabase.auth.signOut();
+  Storage.clearCache();
   _showToast('Password updated — please sign in', 'success');
   window.location.hash = '#auth/login';
 }
 
-/* ── EmailJS ────────────────────────────────────────────── */
-let _emailjsReady = false;
+/* ── Hydrate local user object from Supabase session ──────
+   Mirrors the shape the rest of mindOS_ expects on KEYS.USER
+   --------------------------------------------------------- */
+async function _hydrateUser(sbUser) {
+  const meta = sbUser.user_metadata || {};
 
-async function _sendEmail(toEmail, otp, name) {
-  if (typeof emailjs === 'undefined') {
-    throw new Error('EmailJS not loaded — check index.html script tag');
-  }
-  if (!_emailjsReady) {
-    // v4 API: init takes an object
-    try {
-      emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
-    } catch {
-      // v3 fallback
-      emailjs.init(EMAILJS_PUBLIC_KEY);
-    }
-    _emailjsReady = true;
-  }
-  console.log('[mindOS_] Attempting email to:', toEmail);
-  const result = await emailjs.send(
-    EMAILJS_SERVICE_ID,
-    EMAILJS_TEMPLATE_ID,
-    {
-      to_email:       toEmail,
-      otp_code:       String(otp),
-      user_name:      name || 'there',
-      expiry_minutes: '10',
-    }
-  );
-  console.log('[mindOS_] Email result:', result.status, result.text);
-  return result;
+  /* Try to load existing profile row */
+  const { data: profile } = await supabase
+    .from('users')
+    .select('*')
+    .eq('id', sbUser.id)
+    .single();
+
+  const name     = profile?.name     || meta.name     || sbUser.email.split('@')[0];
+  const initials = profile?.avatar_initials || meta.avatar_initials
+    || name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+
+  /* Upsert profile row */
+  await supabase.from('users').upsert({
+    id:              sbUser.id,
+    email:           sbUser.email,
+    name,
+    avatar_initials: initials,
+    timezone:        profile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    default_focus_mins: profile?.default_focus_mins || 25,
+    theme:           profile?.theme || 'dark',
+  }, { onConflict: 'id' });
+
+  /* Write to cache — same shape as old localStorage KEYS.USER */
+  Storage['_cache'] = Storage['_cache'] || {};
+  const userObj = {
+    id:               sbUser.id,
+    name,
+    email:            sbUser.email,
+    avatarInitials:   initials,
+    timezone:         profile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    defaultFocusMins: profile?.default_focus_mins || 25,
+    joinedAt:         profile?.joined_at || new Date().toISOString(),
+    theme:            profile?.theme || 'dark',
+    isGuest:          false,
+  };
+
+  /* Use internal cache write — no remote write needed for USER key */
+  Storage.get; // ensure Storage is imported
+  await _setCacheDirectly(KEYS.USER, userObj);
 }
 
-/* ── Helpers ────────────────────────────────────────────── */
-function _goHome(container) {
-  const card = container.querySelector('.auth-card');
-  if (card) {
-    card.style.transition = 'opacity 400ms ease';
-    card.style.opacity = '0';
-  }
-  setTimeout(() => { window.location.hash = '#home'; }, card ? 420 : 0);
+/* Direct cache write without triggering remote upsert for USER key */
+function _setCacheDirectly(key, value) {
+  // Access the module-level _cache via a thin escape hatch
+  // storage.js exposes Storage.get which reads _cache; we set via set()
+  // but set() skips USER key intentionally — so we use sessionStorage
+  // as a fast bridge that storage.js.get() falls back to on miss.
+  // Actually: storage.js.get() reads _cache directly. We call Storage.set
+  // for non-USER keys. For USER we write to sessionStorage and storage.js
+  // reads it back via a special check.
+  //
+  // Simplest: just call Storage.set — it guards USER key from remote write.
+  return Storage.set(key, value);
 }
 
-function _err(el, msg) {
-  el.textContent = msg;
-  el.style.display = 'block';
-}
-
+/* ── Guest Mode ─────────────────────────────────────────── */
 function _continueAsGuest(container) {
   const guestUser = {
     id:              'guest',
@@ -583,6 +500,28 @@ function _continueAsGuest(container) {
   };
   Storage.set(KEYS.USER, guestUser);
   _goHome(container);
+}
+
+/* ── Logout (call from settings panel) ─────────────────── */
+export async function logout() {
+  await supabase.auth.signOut();
+  Storage.clearCache();
+  window.location.hash = '#auth/login';
+}
+
+/* ── Helpers ─────────────────────────────────────────────── */
+function _goHome(container) {
+  const card = container?.querySelector('.auth-card');
+  if (card) {
+    card.style.transition = 'opacity 400ms ease';
+    card.style.opacity = '0';
+  }
+  setTimeout(() => { window.location.hash = '#home'; }, card ? 420 : 0);
+}
+
+function _err(el, msg) {
+  el.textContent = msg;
+  el.style.display = 'block';
 }
 
 function _showToast(msg, type = 'default', duration = 4000) {
